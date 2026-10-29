@@ -283,3 +283,41 @@ def test_bootstrap_tracklets(scene):
     t = a.tracks[tid]
     objs = {max(gt, key=lambda o: iou(gt[o][f], t.box(f)[:4])) for f in range(t.start(), t.end() + 1) if t.box(f)}
     assert len(objs) == 1
+
+
+def test_step_stops_where_a_new_object_appears(tmp_path):
+  lines = []
+  for f in range(60):
+    lines.append(f'{f} 0 {100 + 2 * f} 100 40 60 90 1 0.9')      # object A, from frame 0
+    lines.append(f'{f} 0 {400 - 2 * f} 300 40 60 90 1 0.9')      # object B, from frame 0
+    lines.append(f'{f} 0 500 50 30 30 90 1 0.9')                 # static box you chose to ignore
+    if f >= 13:
+      lines.append(f'{f} 0 {50 + f} 380 40 60 90 1 0.9')         # object C appears at 13
+  lines.append('15 0 300 10 20 20 90 1 0.9')                    # one-frame flicker
+  d = load_boxes(write(tmp_path, lines))
+  a = TrackingAnnotation(d, 60, 640, 480, dict(step=10))
+  lo, _ = d.frame_slice(0)
+  a.new_tracks(0, [lo, lo + 1])
+  assert a.step_target(0) == dict(frame=10, new=[], reason='step')
+  a.accept(10)
+  st = a.step_target(10)
+  assert st['frame'] == 13 and st['reason'] == 'new object'
+  assert d.box[st['new'][0]].tolist() == [63, 380, 40, 60]
+  # auto-advance stops there too, with A and B already carried to 13
+  assert len(a.new_tracks(13)) == 2  # C + the static box; A and B are proposed for tracks 1, 2
+  a.accept(13)
+  assert a.step_target(13)['frame'] == 23
+  r = a.advance(13)
+  assert r['frame'] == 59 and r['reason'] == 'end'
+  check_consistent(a)
+
+
+def test_advance_stops_at_first_appearance(tmp_path):
+  lines = [f'{f} 0 {100 + 2 * f} 100 40 60 90 1 0.9' for f in range(40)]
+  lines += [f'{f} 0 300 300 40 60 90 1 0.9' for f in range(27, 40)]
+  d = load_boxes(write(tmp_path, lines))
+  a = TrackingAnnotation(d, 40, 640, 480, dict(step=10))
+  a.new_tracks(0)
+  r = a.advance(0)
+  assert r['frame'] == 27 and r['reason'] == 'new object'
+  assert a.tracks[1].end() == 27  # the existing track was carried to the stop frame

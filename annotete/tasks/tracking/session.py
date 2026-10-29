@@ -119,6 +119,10 @@ class TrackingSession:
       props, lost = self.ann.proposals(f)
       return dict(frame=f, proposals=props, lost=lost)
 
+  def step_target(self, f, step=None):
+    with self.lock:
+      return self.ann.step_target(f, step, self.range[1] if f <= self.range[1] else None)
+
   def tracks(self):
     with self.lock:
       return self.ann.tracks_summary()

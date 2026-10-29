@@ -113,6 +113,7 @@ class App {
       this.refreshStats();
     }
     if ('class_names' in patch) { T.viewer.render(); panels.renderList(T); }
+    T.updateChips();
   }
 
   async setRange(r) {

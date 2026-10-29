@@ -260,6 +260,6 @@ export function renderData(T) {
     h('h4', {}, 'Display'),
     h('div', { class: 'grid2', style: { display: 'grid' } },
       tog('labels', 'labels', 'L'), tog('free', 'free boxes', 'H'), tog('trails', 'trails', 'T'),
-      tog('follow', 'follow track', 'F'), tog('props', 'proposals')),
+      tog('follow', 'follow track', 'F'), tog('props', 'proposals'), tog('stopNew', 'stop at new objects')),
   ));
 }

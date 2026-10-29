@@ -287,6 +287,10 @@ class Handler(BaseHTTPRequestHandler):
   def r_proposals(self, q, name):
     self._send(200, self.app.session(name).proposals(int(q['f'])))
 
+  def r_step(self, q, name):
+    s = self.app.session(name)
+    self._send(200, s.step_target(int(q['f']), int(q['step']) if q.get('step') else None))
+
   def r_tracks(self, q, name):
     s = self.app.session(name)
     self._send(200, dict(rev=s.ann.rev, tracks=s.tracks()))
@@ -382,6 +386,7 @@ ROUTES = [(m, re.compile(p), fn) for m, p, fn in [
   ('GET', ITEM + r'/frame/(\d+)', Handler.r_frame),
   ('GET', ITEM + r'/boxes', Handler.r_boxes),
   ('GET', ITEM + r'/proposals', Handler.r_proposals),
+  ('GET', ITEM + r'/step', Handler.r_step),
   ('GET', ITEM + r'/tracks', Handler.r_tracks),
   ('GET', ITEM + r'/track/(\d+)', Handler.r_track),
   ('GET', ITEM + r'/coverage', Handler.r_coverage),

@@ -186,3 +186,17 @@ def test_server_api(dataset, tmp_path):
   finally:
     srv.shutdown()
     app.shutdown()
+
+
+def test_constant_id_column_is_not_tracks(tmp_path):
+  p = tmp_path / 'c.txt'
+  p.write_text(''.join(f'{f} 0 {10 + f} 10 20 20 0.9 1 0.5\n{f} 0 100 100 20 20 0.9 1 0.5\n' for f in range(20)))
+  assert not load_boxes(str(p)).ids_look_like_tracks()
+  q = tmp_path / 't.txt'  # tracker output that uses id 0
+  q.write_text(''.join(f'{f} 0 {10 + f} 10 20 20 0.9 1 0.5\n{f} 1 100 100 20 20 0.9 1 0.5\n' for f in range(20)))
+  d = load_boxes(str(q))
+  assert d.ids_look_like_tracks()
+  from annotete.tasks.tracking.annotation import TrackingAnnotation
+  a = TrackingAnnotation(d, 20, 640, 480)
+  a.import_tracks()
+  assert sorted(a.tracks) == [0, 1] and a.tracks[0].n_boxes() == 20

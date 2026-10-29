@@ -9,7 +9,7 @@ Used for
 """
 import numpy as np
 
-from ...geometry import center_dist, greedy_match, iou_many, iou_matrix
+from ...geometry import greedy_match, iou_matrix
 
 PROPOSE_IOU = 0.3   # min IoU(prediction, detection) to continue a chain
 SURE_IOU = 0.5      # a proposal is "sure" if it lands with this IoU ...
@@ -29,12 +29,13 @@ def velocity(track, f, span=5):
   return np.zeros(4)
 
 
-def propagate(ann, starts, f_end, max_coast):
+def propagate(ann, starts, f_end, max_coast, used=None):
   """starts: {tid: (frame, box, velocity)}, all frames < f_end.
   Returns {tid: result}. A result has det >= 0 when the chain found a
   detection at f_end, or at a later frame than it started from when it was
   only coasting at f_end (frame says where). Otherwise det = -1 (lost) and
-  pred is the predicted box at f_end."""
+  pred is the predicted box at f_end. If `used` is a dict it receives
+  {frame: {det, ...}}: the detections the chains went through."""
   st = {}
   for tid, (f0, box, v) in starts.items():
     st[tid] = dict(f0=f0, f=f0, box=np.array(box[:4], np.float64), v=np.array(v, np.float64), min_iou=1.0,
@@ -62,6 +63,8 @@ def propagate(ann, starts, f_end, max_coast):
         row = np.delete(m[r], c)
         s['runner'] = float(row.max()) if len(row) else 0.0
         s['min_iou'] = min(s['min_iou'], s['iou'])
+        if used is not None:
+          used.setdefault(t, set()).add(int(idx[c]))
     for tid in act:
       s = st[tid]
       if s['f'] < t and t - s['f'] > max_coast:
@@ -92,31 +95,35 @@ def exited(box, width, height, margin=0.5):
   return ix * iy < margin * w * h
 
 
-def new_objects(ann, f_prev, f, taken):
-  """Free detections at f that were not there (as free detections) at f_prev
-  and are not taken by a proposal: objects that appeared since the last step."""
-  idx, boxes = ann.free_dets(f)
-  pidx, pboxes = ann.free_dets(f_prev) if f_prev is not None else ([], np.zeros((0, 4)))
-  out = []
-  for i, b in zip(idx, boxes):
-    if int(i) in taken:
-      continue
-    if len(pidx):
-      ious = iou_many(b, pboxes)
-      if ious.max() > 0.1 or min(center_dist(b, p) for p in pboxes) < max(b[2], b[3]):
-        continue
-    out.append(int(i))
-  return out
+def first_appearance(ann, cur, target, explained, min_len=3):
+  """Earliest frame in (cur, target] where an object appears that no track
+  explains: chains of free detections (not in `explained` {frame: {det}})
+  that start after `cur` and last `min_len` frames or are still there at
+  `target`. Detections already free at `cur` are not new (you saw them).
+  Returns (frame, [first det of each chain starting there]) or (None, [])."""
+  born = {}
+  for chain in bootstrap(ann, cur, target, iou_min=0.3, max_coast=2, min_len=1, exclude=explained):
+    f0 = chain[0][0]
+    if f0 > cur and (len(chain) >= min_len or chain[-1][0] == target):
+      born.setdefault(f0, []).append(chain[0][1])
+  if not born:
+    return None, []
+  f = min(born)
+  return f, born[f]
 
 
-def bootstrap(ann, a, b, iou_min=0.5, max_coast=5, min_len=3, min_conf=None):
-  """Simple IoU + velocity tracker over free detections in frames a..b.
+def bootstrap(ann, a, b, iou_min=0.5, max_coast=5, min_len=3, min_conf=None, exclude=None):
+  """Simple IoU + velocity tracker over free detections in frames a..b
+  (minus `exclude` {frame: {det}}).
   Returns a list of tracklets: [[(frame, det), ...], ...]. It prefers to cut a
   track (easy to merge later) over an uncertain link (an ID switch)."""
   active = []   # dicts: f, box, v, dets
   done = []
   for t in range(a, b + 1):
     idx, boxes = ann.free_dets(t, min_conf=min_conf)
+    if exclude and exclude.get(t):
+      keep = np.array([int(i) not in exclude[t] for i in idx], bool)
+      idx, boxes = idx[keep], boxes[keep]
     used = set()
     if active and len(idx):
       preds = np.array([_predict(s, t) for s in active])

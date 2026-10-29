@@ -39,6 +39,15 @@ click every frame:
    * two ids swapped → click one, <kbd>X</kbd>, click the other.
    * new object → <kbd>Shift</kbd>+click it (or <kbd>Shift</kbd>+<kbd>N</kbd> for all free boxes).
    * object left → do nothing: a track simply ends at its last keyframe.
+   * object back after being lost → make its old id the brush (type `7`
+     <kbd>Enter</kbd>, click `7` in the track list, or click its `7 lost` tag) and
+     click its box. The frames in between are filled if the gap is shorter than
+     *max interpolation gap*; mark them absent with <kbd>O</kbd> if it was hidden.
+   A forward step (<kbd>Space</kbd> or <kbd>D</kbd>) **stops early** on the first frame
+   where an object that no track explains shows up (it must last a few frames, so
+   one-frame flickers are ignored, and boxes you left free on the previous
+   keyframe do not count). The new box is marked orange `new`, so its track starts
+   where it is first seen. Turn this off in *Data → Display → stop at new objects*.
 4. <kbd>Shift</kbd>+<kbd>Space</kbd> **auto-advances**: it keeps accepting confident
    proposals step after step and stops only where a human is needed (an unsure
    proposal, a lost track, a new object, or the end of the range).
@@ -154,8 +163,10 @@ annotated by drawing.
 * `mot`: MOTChallenge, comma separated, 1-based frames (auto detected by commas).
 * custom columns: `--format "frame=0,id=1,x=2,y=3,w=4,h=5,conf=6,cls=7,quality=8"`.
 
-**Classes**: pick which classes to annotate (`--classes 1,5`, at setup, or any
-time in *Data*); others are hidden and ignored. Name them with
+**Classes**: pick which classes to annotate (`--classes 1,5`, the checkboxes after
+*Scan* on the setup page, or any time in *Data → Classes to annotate*); the other
+classes' detections are hidden and ignored, and nothing checked means all classes.
+The chip in the top bar shows the current choice. Name them with
 `--class-names "1=person,5=car"` or in *Data*. A minimum confidence
 (`--min-conf`, or the slider) hides weak detections.
 

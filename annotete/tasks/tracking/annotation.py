@@ -184,8 +184,8 @@ class TrackingAnnotation:
     if tid is None:
       tid = self.next_id
     tid = int(tid)
-    if tid <= 0:
-      raise EditError('track ids must be positive')
+    if tid < 0:
+      raise EditError('track ids must be 0 or positive')
     if tid in self.tracks:
       raise EditError(f'track {tid} already exists')
     self._touch(tid)
@@ -410,9 +410,11 @@ class TrackingAnnotation:
     return t.id
 
   def new_tracks(self, f, dets=None):
-    """A new track for each detection (default: every free detection at f)."""
+    """A new track for each detection (default: every free detection at f that
+    is not proposed for an existing track)."""
     if dets is None:
-      dets = self.free_dets(f)[0].tolist()
+      proposed = {p['det'] for p in self.proposals(f)[0] if p['frame'] == f}
+      dets = [d for d in self.free_dets(f)[0].tolist() if d not in proposed]
     ids = []
     with self._edit('new tracks'):
       for det in dets:
@@ -575,6 +577,17 @@ class TrackingAnnotation:
       proposals [{track, det, frame, box, pred, sure, iou, coast}]: frame is f, or
         an earlier frame when the detection at f is missing (coast)
       lost [{track, box, exited}]: no detection found near the prediction"""
+    res = self._propagate_to(f, lookback)
+    props, lost = [], []
+    for tid, r in sorted(res.items()):
+      if r['det'] >= 0:
+        props.append(dict(track=tid, det=r['det'], frame=r['frame'], box=r['box'], pred=r['pred'], sure=r['sure'],
+                          iou=round(r['iou'], 3), coast=r['coast']))
+      else:
+        lost.append(dict(track=tid, box=r['pred'], exited=propose.exited(r['pred'], self.width, self.height)))
+    return props, lost
+
+  def _propagate_to(self, f, lookback=None, used=None):
     step = self.settings['step']
     lookback = lookback or max(2 * step, 25)
     starts = {}
@@ -585,15 +598,23 @@ class TrackingAnnotation:
       if g is None or f - g > lookback:
         continue
       starts[t.id] = (g, box, propose.velocity(t, g))
-    res = propose.propagate(self, starts, f, max_coast=max(10, step))
-    props, lost = [], []
-    for tid, r in sorted(res.items()):
-      if r['det'] >= 0:
-        props.append(dict(track=tid, det=r['det'], frame=r['frame'], box=r['box'], pred=r['pred'], sure=r['sure'],
-                          iou=round(r['iou'], 3), coast=r['coast']))
-      else:
-        lost.append(dict(track=tid, box=r['pred'], exited=propose.exited(r['pred'], self.width, self.height)))
-    return props, lost
+    return propose.propagate(self, starts, f, max_coast=max(10, step), used=used)
+
+  def step_target(self, f, step=None, end=None):
+    """Where a forward keyframe step from f should land: f + step, or earlier
+    if an object that no track explains appears in between (so its track can
+    start where it is first seen). Returns {frame, new: [det], reason}."""
+    step = int(step or self.settings['step'])
+    end = self.n_frames - 1 if end is None else min(int(end), self.n_frames - 1)
+    target = min(f + step, end)
+    if target <= f:
+      return dict(frame=f, new=[], reason='end')
+    used = {}
+    self._propagate_to(target, used=used)
+    g, new = propose.first_appearance(self, f, target, used)
+    if g is None:
+      return dict(frame=target, new=[], reason='step')
+    return dict(frame=g, new=new, reason='new object')
 
   def _accept_one(self, p):
     if self.owner[p['det']] >= 0 or p['track'] not in self.tracks:
@@ -624,7 +645,8 @@ class TrackingAnnotation:
     with self._edit('auto advance'):
       cur = f
       for _ in range(max_steps):
-        nxt = min(cur + step, end)
+        st = self.step_target(cur, step, end)
+        nxt = st['frame']
         if nxt <= cur:
           reason = 'end'
           break
@@ -637,7 +659,7 @@ class TrackingAnnotation:
             accepted += 1
         self._flush()
         lost_alive = [x for x in lost if x['track'] in alive and not x['exited']]
-        new = propose.new_objects(self, cur, nxt, {p['det'] for p in props})
+        new = st['new']
         steps += 1
         cur = nxt
         if unsure or lost_alive or new:

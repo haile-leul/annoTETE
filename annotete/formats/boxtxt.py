@@ -139,9 +139,16 @@ class Detections:
     being unique per box (detector output)."""
     if 'id' not in self.layout.cols or not len(self):
       return False
-    ids = self.src_id[self.src_id >= 0]
-    if not len(ids):
+    ok = self.src_id >= 0
+    ids = self.src_id[ok]
+    if len(ids) < 2:
       return False
+    # a track id appears at most once per frame; a placeholder column (all 0) does not
+    pairs = len(np.unique(np.stack([self.frame[ok], ids]), axis=1)[0])
+    if pairs < 0.95 * len(ids):
+      return False
+    if len(np.unique(ids)) == 1:  # one object tracked over the video, unless it is a 0 placeholder
+      return int(ids[0]) > 0
     return len(np.unique(ids)) <= 0.5 * len(ids)
 
 

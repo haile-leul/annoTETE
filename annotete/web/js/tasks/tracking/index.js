@@ -45,7 +45,7 @@ export class TrackingTask {
     this.playing = false;
     this.issues = [];
     this.issueIdx = -1;
-    this.opts = Object.assign({ labels: true, free: true, trails: true, follow: false, props: true, onlyHere: false },
+    this.opts = Object.assign({ labels: true, free: true, trails: true, follow: false, props: true, onlyHere: false, stopNew: true },
       store.get('opts', {}));
     this.token = 0;
     this.busy = 0;
@@ -201,7 +201,26 @@ export class TrackingTask {
 
   async acceptAndStep() {
     if (this.props.proposals.length) await this.cmd('accept', { frame: this.frame });
-    this.go(Math.min(this.frame + this.step, this.meta.n_frames - 1));
+    await this.stepForward();
+  }
+
+  // One keyframe step forward. With "stop at new objects" on, the step ends
+  // early on the first frame where an object nobody tracks shows up.
+  async stepForward() {
+    const f = this.frame;
+    const full = Math.min(f + this.step, this.meta.n_frames - 1);
+    if (!this.opts.stopNew) { this.go(full); return; }
+    let r;
+    try {
+      r = await get(`${this.base}/step?f=${f}&step=${this.step}`);
+    } catch (e) { this.go(full); return; }
+    if (this.frame !== f) return; // the user moved meanwhile
+    this.newDets = new Set(r.new);
+    this.newFrame = r.frame;
+    this.go(r.frame);
+    if (r.new.length && r.frame < full) {
+      toast(`New object at frame ${r.frame} (${r.frame - f} of ${this.step} frames): start its track here`, '', 3500);
+    }
   }
 
   async accept() {
@@ -565,11 +584,13 @@ export class TrackingTask {
         if (propDets.has(d[0]) && this.opts.props) continue;
         const [x, y, w, hh] = view.rect(d.slice(1, 5));
         const isH = d === hov;
+        const isNew = this.newFrame === this.frame && this.newDets && this.newDets.has(d[0]);
         ctx.setLineDash(isH ? [] : [5, 3]);
-        ctx.lineWidth = isH ? 2 : 1.25;
-        ctx.strokeStyle = isH ? '#fff' : 'rgba(255,255,255,0.8)';
+        ctx.lineWidth = isH || isNew ? 2 : 1.25;
+        ctx.strokeStyle = isH ? '#fff' : isNew ? '#f5a524' : 'rgba(255,255,255,0.8)';
         if (isH) { ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.fillRect(x, y, w, hh); }
         ctx.strokeRect(x, y, w, hh);
+        if (isNew) this._label(ctx, x, y, 'new', '#f5a524', true);
       }
       ctx.setLineDash([]);
     }
@@ -712,7 +733,9 @@ export class TrackingTask {
     pc.textContent = !p ? '' : p.mode === 'swap' ? `Swap #${this.active} with … click a track (Esc cancels)`
       : p.mode === 'merge' ? `Merge into #${this.active}: click the other track (Esc cancels)`
         : 'Draw a box: drag on the image (Esc cancels)';
-    $('#modeChip').textContent = this.meta.mode === 'tracks' ? 'correcting tracks' : 'assigning ids';
+    const cl = this.app.settings.classes || [];
+    $('#modeChip').textContent = `${this.meta.mode === 'tracks' ? 'correcting tracks' : 'assigning ids'} · ${cl.length ? `classes ${cl.map((c) => (this.app.settings.class_names || {})[String(c)] || c).join(', ')}` : 'all classes'}`;
+    $('#modeChip').title = 'Input mode and the classes being annotated (change them in the Data tab)';
   }
 
   // -------------------------------------------------------------- keyboard
@@ -739,7 +762,7 @@ export class TrackingTask {
     switch (k) {
       case 'ArrowRight': if (e.altKey) this.jumpKey(1); else this.stepBy(big); return true;
       case 'ArrowLeft': if (e.altKey) this.jumpKey(-1); else this.stepBy(-big); return true;
-      case 'd': case 'D': case 'PageDown': this.stepBy(this.step * (e.shiftKey ? 5 : 1)); return true;
+      case 'd': case 'D': case 'PageDown': if (e.shiftKey) this.stepBy(this.step * 5); else this.stepForward(); return true;
       case 'a': case 'A': case 'PageUp': this.stepBy(-this.step * (e.shiftKey ? 5 : 1)); return true;
       case 'Home': this.go(this.range[0]); return true;
       case 'End': this.go(this.range[1]); return true;
@@ -861,7 +884,7 @@ export class TrackingTask {
       case 'prev': this.stepBy(-1); break;
       case 'next': this.stepBy(1); break;
       case 'prevStep': this.stepBy(-this.step); break;
-      case 'nextStep': this.stepBy(this.step); break;
+      case 'nextStep': this.stepForward(); break;
       case 'play': this.togglePlay(); break;
       case 'in': this.setRangeEnd(0); break;
       case 'out': this.setRangeEnd(1); break;
@@ -873,7 +896,7 @@ export class TrackingTask {
 export const KEYMAP = [
   ['Navigate', [
     ['→ / ←', 'next / previous frame (Shift: ±10)'],
-    ['D / A', 'one keyframe step forward / back (Shift: 5 steps)'],
+    ['D / A', 'one keyframe step forward / back (Shift: 5 steps); stops early where a new object appears'],
     ['Home / End', 'start / end of the range'],
     ['P', 'play / pause'],
     ['Alt+→ / Alt+←', 'next / previous keyframe of the active track'],
@@ -885,7 +908,7 @@ export const KEYMAP = [
     ['Space', 'accept proposals, jump one step'],
     ['Shift+Space', 'auto-advance until something needs you'],
     ['Enter', 'accept proposals here'],
-    ['Shift+N', 'every free detection here → new track'],
+    ['Shift+N', 'every free detection here (not proposed for a track) → new track'],
     ['N', 'brush = new id'],
     ['12 Enter', 'type an id: brush (or give it to the hovered box)'],
     ['click track box', 'make it the brush (active track)'],
