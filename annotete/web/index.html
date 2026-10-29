@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>annoTETE</title>
+<link rel="stylesheet" href="/css/app.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='4' y='6' width='16' height='14' rx='2' fill='none' stroke='%2337c3a6' stroke-width='3'/%3E%3Crect x='13' y='13' width='15' height='13' rx='2' fill='none' stroke='%23f5a524' stroke-width='3'/%3E%3C/svg%3E">
+</head>
+<body>
+<div id="app">
+  <!-- setup / project picker -->
+  <section id="setup" class="setup hidden"></section>
+
+  <!-- annotator -->
+  <section id="work" class="work hidden">
+    <header class="topbar">
+      <div class="brand">anno<b>TETE</b></div>
+      <div class="itemnav">
+        <button class="icon" id="prevItem" title="Previous video">&#8249;</button>
+        <select id="itemSelect" title="Video"></select>
+        <button class="icon" id="nextItem" title="Next video">&#8250;</button>
+        <select id="itemStatus" title="Status of this video">
+          <option value="todo">To do</option><option value="progress">In progress</option><option value="done">Done</option>
+        </select>
+      </div>
+      <div class="chips">
+        <span class="chip" id="modeChip" title="Input mode"></span>
+        <span class="chip brush" id="brushChip" title="Active track (brush). Click a free detection to give it this id. Esc clears."></span>
+        <span class="chip hint" id="pendingChip"></span>
+      </div>
+      <div class="spacer"></div>
+      <span class="savestate" id="saveState">saved</span>
+      <button id="undoBtn" title="Undo (Ctrl+Z)">&#8630;</button>
+      <button id="redoBtn" title="Redo (Ctrl+Shift+Z)">&#8631;</button>
+      <button id="exportBtn" class="primary">Export</button>
+      <button id="projectBtn" title="Project">&#9776;</button>
+      <button id="helpBtn" title="Shortcuts (?)">?</button>
+    </header>
+
+    <main class="main">
+      <div class="viewer" id="viewer">
+        <canvas id="canvas"></canvas>
+        <div class="hud tl" id="hudFrame"></div>
+        <div class="hud tr" id="hudProps"></div>
+        <div class="hud idbuf hidden" id="idBuffer"></div>
+        <div class="hud bl" id="hudHover"></div>
+        <div class="loading hidden" id="loading"></div>
+      </div>
+      <aside class="side">
+        <nav class="tabs">
+          <button data-tab="tracks" class="on">Tracks</button>
+          <button data-tab="review">Review <span class="badge" id="issueCount"></span></button>
+          <button data-tab="data">Data</button>
+        </nav>
+        <div class="tab on" id="tab-tracks"></div>
+        <div class="tab" id="tab-review"></div>
+        <div class="tab" id="tab-data"></div>
+      </aside>
+    </main>
+
+    <footer class="bottom">
+      <div class="transport">
+        <button class="icon" data-act="start" title="Range start (Home)">&#9198;</button>
+        <button class="icon" data-act="prevStep" title="Back one step (A)">&#9194;</button>
+        <button class="icon" data-act="prev" title="Previous frame (&larr;)">&#9664;</button>
+        <button class="icon play" data-act="play" title="Play / pause (P)">&#9654;</button>
+        <button class="icon" data-act="next" title="Next frame (&rarr;)">&#9654;&#xFE0E;</button>
+        <button class="icon" data-act="nextStep" title="Forward one step (D)">&#9193;</button>
+        <button class="icon" data-act="end" title="Range end (End)">&#9197;</button>
+        <label class="field">frame <input id="frameInput" type="number" min="0"></label>
+        <span class="time" id="timeLabel"></span>
+        <label class="field" title="Keyframe step: how many frames A / D / Space jump">step <input id="stepInput" type="number" min="1"></label>
+        <div class="spacer"></div>
+        <span class="rangeinfo" id="rangeInfo"></span>
+        <button data-act="in" title="Range start here (Shift+I)">[ in</button>
+        <button data-act="out" title="Range end here (Shift+O)">out ]</button>
+        <button data-act="clearRange" title="Use the whole video">full</button>
+        <button data-act="allRanges" title="Set the same range for every video">all videos&hellip;</button>
+      </div>
+      <div class="timeline" id="timeline">
+        <canvas id="ruler"></canvas>
+        <div class="ganttwrap" id="ganttWrap"><canvas id="gantt"></canvas></div>
+      </div>
+    </footer>
+  </section>
+</div>
+
+<div id="toasts"></div>
+<div id="modalRoot"></div>
+<div id="menu" class="menu hidden"></div>
+
+<script type="module" src="/js/app.js"></script>
+</body>
+</html>

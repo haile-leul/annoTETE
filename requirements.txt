@@ -1,0 +1,4 @@
+numpy
+opencv-python          # or opencv-python-headless; any OpenCV >= 4 works
+# optional: ffmpeg on PATH for frame-exact, high quality video trimming
+# tests: pytest
