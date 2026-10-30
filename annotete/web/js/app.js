@@ -158,22 +158,27 @@ class App {
     const p = this.project;
     const anyRange = p.items.some((i) => i.range);
     modal('Export', (close) => {
-      const out = h('input', { type: 'text', value: store.get('exportDir', `${p.root}/export`) });
+      // default: <project folder>/export; a folder you pick is remembered for this project only
+      const defOut = `${p.root}/export`;
+      const out = h('input', { type: 'text', value: store.get(`exportDir:${p.root}`, defOut) });
+      const resetOut = h('a', { href: '#', onclick: (e) => { e.preventDefault(); out.value = defOut; } }, 'project default');
       const fmt = (k, label, on) => h('label', { class: 'tog' }, h('input', { type: 'checkbox', value: k, checked: on, class: 'fmt' }), label);
       const trimmed = h('input', { type: 'checkbox', checked: anyRange });
       const interp = h('input', { type: 'checkbox', checked: true });
+      const video = h('input', { type: 'checkbox', checked: store.get(`exportVideo:${p.root}`, false) });
       const which = h('select', {}, h('option', { value: 'all' }, `all videos (${p.items.length})`),
         this.task ? h('option', { value: 'cur' }, `only ${this.task.name}`) : '');
       const log = h('pre', { class: 'log hidden' });
       const run = h('button', { class: 'primary' }, 'Export');
       run.onclick = async () => {
-        store.set('exportDir', out.value);
+        store.set(`exportDir:${p.root}`, out.value);
+        store.set(`exportVideo:${p.root}`, video.checked);
         const formats = $$('input.fmt', log.parentElement).filter((c) => c.checked).map((c) => c.value);
         run.disabled = true;
         log.classList.remove('hidden');
         log.textContent = 'starting ...';
         try {
-          let job = await post('/api/export', { out: out.value, trimmed: trimmed.checked, interp: interp.checked, formats,
+          let job = await post('/api/export', { out: out.value, trimmed: trimmed.checked, interp: interp.checked, formats, video: video.checked,
             items: which.value === 'cur' ? [this.task.name] : null });
           while (!job.done) {
             await new Promise((r) => setTimeout(r, 400));
@@ -185,15 +190,16 @@ class App {
         run.disabled = false;
       };
       return h('div', {},
-        h('label', { class: 'blk' }, 'Output folder'), out,
+        h('label', { class: 'blk' }, 'Output folder ', h('span', { class: 'muted' }, '(', resetOut, ')')), out,
         h('label', { class: 'blk' }, 'Annotation formats'),
         h('div', { class: 'row' }, fmt('txt', 'same layout as the input (extra columns kept)', true)),
         h('div', { class: 'row' }, fmt('mot', 'MOTChallenge gt (1-based)', false), fmt('json', 'JSON (with box kinds)', false)),
         h('label', { class: 'blk' }, 'Options'),
         h('div', { class: 'row' }, h('label', { class: 'tog' }, trimmed, 'trimmed: only each video\'s range, renumbered from 0, plus the cut video and its input boxes')),
         h('div', { class: 'row' }, h('label', { class: 'tog' }, interp, 'include interpolated boxes (no detection behind them)')),
+        h('div', { class: 'row' }, h('label', { class: 'tog' }, video, 'annotated video: boxes and ids drawn on the frames (dashed = interpolated); follows the trimmed option')),
         h('div', { class: 'row', style: { marginTop: '8px' } }, which),
-        h('p', { class: 'muted' }, 'Writes annotations/<video>.txt (and annotations_mot/, annotations_json/); with trimmed also videos/<video>.mp4 and detections/<video>.txt.'),
+        h('p', { class: 'muted' }, 'Writes annotations/<video>.txt (and annotations_mot/, annotations_json/); with trimmed also videos/<video>.mp4 and detections/<video>.txt; with annotated video videos_annotated/<video>.mp4.'),
         log,
         h('div', { class: 'actions' }, h('button', { onclick: () => close(null) }, 'Close'), run));
     }, { wide: true });

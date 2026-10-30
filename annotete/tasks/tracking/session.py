@@ -11,7 +11,7 @@ import numpy as np
 from ...formats import BoxWriter, Detections, Layout, mot_line
 from ...project import atomic_json
 from ...sources import FrameServer, open_source
-from ... import trim
+from ... import render, trim
 from .annotation import EditError, TrackingAnnotation
 from .model import AUTO_INTERP
 
@@ -171,10 +171,11 @@ class TrackingSession:
       self.source.close()
 
   # ------------------------------------------------------------------ export
-  def export(self, out_dir, trimmed=False, formats=('txt',), interp=True, log=print):
-    """Write annotations (and with `trimmed`: the trimmed video + input boxes)
-    into out_dir. Frames are renumbered from the start of the range when
-    trimmed. Returns a list of warnings."""
+  def export(self, out_dir, trimmed=False, formats=('txt',), interp=True, log=print, video=False):
+    """Write annotations (and with `trimmed`: the trimmed video + input boxes;
+    with `video`: a video with the annotations drawn on it) into out_dir.
+    Frames are renumbered from the start of the range when trimmed. Returns a
+    list of warnings."""
     name = self.item['name']
     a, b = self.range if trimmed else (0, self.ann.n_frames - 1)
     off = a if trimmed else 0
@@ -219,6 +220,12 @@ class TrackingSession:
           warnings.append(warn)
       if self.item.get('boxes'):
         trim.trim_boxes(self.dets, os.path.join(out_dir, 'detections', name + '.txt'), a, b)
+    if video:
+      dst = os.path.join(out_dir, 'videos_annotated', name + '.mp4')
+      log(f'{name}: drawing the annotations on frames {a}-{b}')
+      n = render.render_video(self.item['media'], dst, a, b, rows, self.project.settings.get('class_names'), off, log)
+      if n != b - a + 1:
+        warnings.append(f'{name}: annotated video has {n} frames, expected {b - a + 1} (the video ended early)')
     n_interp = sum(1 for r in rows if r[4] == AUTO_INTERP)
     log(f'{name}: {len(rows)} boxes ({n_interp} interpolated) in {len({r[1] for r in rows})} tracks')
     return warnings

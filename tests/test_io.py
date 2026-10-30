@@ -255,3 +255,25 @@ def test_reopening_a_project_uses_the_paths_given_now(dataset, tmp_path):
   p3, _ = Project.open_or_create(root, str(dataset / 'videos'), str(dataset / 'dets'))
   assert p3.settings['step'] == 15  # None settings keep the saved value
   assert TrackingSession(p3, p3.items[0], frames=False).tracks() == s2.tracks()
+
+
+def test_export_annotated_video(dataset, tmp_path):
+  from annotete.render import id_color
+  p, _ = Project.create(str(tmp_path / 'proj'), str(dataset / 'videos'), str(dataset / 'dets'))
+  s = TrackingSession(p, p.items[0], frames=False)
+  ids = s.command('new_tracks', dict(frame=0))['result']
+  s.command('accept', dict(frame=10))
+  s.item['range'] = [5, 24]
+  out = tmp_path / 'out'
+  assert s.export(str(out), trimmed=True, formats=(), log=lambda m: None, video=True) == []
+  assert not (out / 'annotations').exists()  # only what was asked for
+  cap = cv2.VideoCapture(str(out / 'videos_annotated' / 'cam0.mp4'))
+  assert int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) == 20
+  cap.set(cv2.CAP_PROP_POS_FRAMES, 3)  # = video frame 8, between the keyframes 0 and 10
+  ok, img = cap.read()
+  assert ok
+  t = s.ann.tracks[ids[0]]
+  x, y, w, h = (int(round(v)) for v in t.box(8)[:4])
+  # the left edge of the box (below the label) is drawn in the track's color
+  edge = img[y + h // 2, max(0, x - 1):x + 2].astype(int)
+  assert np.abs(edge - np.array(id_color(ids[0]))).sum(axis=1).min() < 90

@@ -112,7 +112,7 @@ class App:
     threading.Thread(target=run, daemon=True).start()
     return job
 
-  def export_job(self, job, out, names, trimmed, formats, interp):
+  def export_job(self, job, out, names, trimmed, formats, interp, video=False):
     out = os.path.abspath(os.path.expanduser(out))
     os.makedirs(out, exist_ok=True)
     self.save_all()
@@ -122,7 +122,7 @@ class App:
       if not trimmed and not s.ann.tracks and not os.path.exists(self.project.ann_path(s.item)):
         job['log'].append(f'{name}: not annotated yet, skipped')
         continue
-      job['warnings'] += s.export(out, trimmed, formats, interp, log=job['log'].append)
+      job['warnings'] += s.export(out, trimmed, formats, interp, log=job['log'].append, video=video)
       job['progress'] = (k + 1) / len(names)
     job['log'].append(f'done: {out}')
     job['out'] = out
@@ -361,8 +361,9 @@ class Handler(BaseHTTPRequestHandler):
   def r_export(self, q):
     b = self._body()
     names = b.get('items') or [it['name'] for it in self.app.project.items]
-    job = self.app.start_job(self.app.export_job, b['out'], names, bool(b.get('trimmed')),
-                             tuple(b.get('formats') or ('txt',)), b.get('interp', True))
+    out = b.get('out') or os.path.join(self.app.project.root, 'export')
+    job = self.app.start_job(self.app.export_job, out, names, bool(b.get('trimmed')),
+                             tuple(b.get('formats') or ()), b.get('interp', True), bool(b.get('video')))
     self._send(200, job)
 
   def r_job(self, q, jid):

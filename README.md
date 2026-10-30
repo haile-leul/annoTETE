@@ -202,7 +202,9 @@ ffmpeg OpenCV is used) and the output frame count is verified.
 
 ## Output
 
-*Export* (or `python -m annotete export --project P --out O [--trim] [--formats txt,mot,json]`):
+*Export* (or `python -m annotete export --project P [--out O] [--trim] [--formats txt,mot,json] [--video]`).
+The output folder defaults to `<project folder>/export`; a folder you pick in the
+dialog is remembered for that project only.
 
 ```
 out/annotations/<video>.txt        same layout as the input, track id in the id column
@@ -210,7 +212,14 @@ out/annotations_mot/<video>.txt    MOTChallenge gt: frame(1-based),id,x,y,w,h,1,
 out/annotations_json/<video>.json  per track: [frame, x, y, w, h, det_index, kind]
 out/videos/<video>.mp4             trimmed export only
 out/detections/<video>.txt         trimmed export only: the input boxes of the range
+out/videos_annotated/<video>.mp4   "annotated video" / --video: boxes + ids drawn on the frames
 ```
+
+The annotated video covers the same frames as the rest of the export (the range
+when trimmed). Each track has the same color as in the app, with its id (and
+class name if set) on a label, interpolated boxes are dashed, and the frame number
+in the bottom-left corner matches the exported annotation files. It is written as
+H.264 through ffmpeg when available, otherwise with OpenCV.
 
 In the `txt` output a box that comes from a detection is that detection's
 original line with the track id put in the id column (confidence, class, quality

@@ -87,7 +87,8 @@ def cmd_trim(a):
 def cmd_export(a):
   from .tasks import session_class
   p = Project.open(a.project)
-  formats = tuple(x.strip() for x in a.formats.split(','))
+  out = a.out or os.path.join(p.root, 'export')
+  formats = tuple(x.strip() for x in a.formats.split(',') if x.strip())
   for item in p.items:
     if a.items and item['name'] not in a.items.split(','):
       continue
@@ -95,10 +96,10 @@ def cmd_export(a):
       print(f'{item["name"]}: not annotated yet, skipped')
       continue
     s = session_class(p.settings.get('task', 'tracking'))(p, item, frames=False)
-    for w in s.export(a.out, a.trim, formats, not a.no_interp):
+    for w in s.export(out, a.trim, formats, not a.no_interp, video=a.video):
       print('warning:', w)
     s.source.close()
-  print(f'done: {os.path.abspath(a.out)}')
+  print(f'done: {os.path.abspath(out)}')
 
 
 def cmd_info(a):
@@ -167,11 +168,13 @@ def main(argv=None):
 
   p = sub.add_parser('export', help='write annotations of a project')
   p.add_argument('--project', required=True)
-  p.add_argument('--out', required=True)
+  p.add_argument('--out', help='output folder (default: <project>/export)')
   p.add_argument('--trim', action='store_true', help='only the selected range of each video, renumbered from 0, '
                                                     'with the trimmed video and input boxes')
   p.add_argument('--formats', default='txt', help='comma list of txt (input layout), mot, json')
   p.add_argument('--no-interp', action='store_true', help='leave out interpolated boxes (no detection behind them)')
+  p.add_argument('--video', action='store_true',
+                 help='also write videos_annotated/<video>.mp4 with the boxes and ids drawn on the frames')
   p.add_argument('--items', help='comma list of item names (default all)')
   p.set_defaults(fn=cmd_export)
 
