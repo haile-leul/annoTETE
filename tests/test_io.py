@@ -84,6 +84,47 @@ def test_separator_and_frame_base_detection(tmp_path):
   assert load_boxes(str(space), frame_base='1').layout.frame_base == 1
 
 
+def test_trimmed_detections_always_in_dump_layout(tmp_path):
+  """Exported detection files: space separated, frame 0 = range start,
+  frame id x y w h conf class quality + extras, whatever the input layout."""
+  from annotete.trim import trim_boxes
+  user = ("0 2 389 331 342 139 66.3086 5 0.587 -1 -9999 -9999 -9999 -9999\n"
+          "0 5 25 346 380 143 74.707 5 0.397 -1 -9999 -9999 -9999 -9999\n"
+          "1 11 24 350 383 135 76.6113 5 0.376 -1 -9999 -9999 -9999 -9999\n"
+          "1 13 373 324 380 139 66.1621 5 0.508 -1 -9999 -9999 -9999 -9999\n"
+          "2 18 24 350 384 135 76.6602 5 0.382 -1 -9999 -9999 -9999 -9999\n"
+          "2 20 374 323 381 143 67.1387 5 0.505 -1 -9999 -9999 -9999 -9999\n"
+          "3 25 24 350 385 136 75.0977 5 0.375 -1 -9999 -9999 -9999 -9999\n")
+  expected = [  # frames 1..3, renumbered from 0, every other token untouched
+    "0 11 24 350 383 135 76.6113 5 0.376 -1 -9999 -9999 -9999 -9999",
+    "0 13 373 324 380 139 66.1621 5 0.508 -1 -9999 -9999 -9999 -9999",
+    "1 18 24 350 384 135 76.6602 5 0.382 -1 -9999 -9999 -9999 -9999",
+    "1 20 374 323 381 143 67.1387 5 0.505 -1 -9999 -9999 -9999 -9999",
+    "2 25 24 350 385 136 75.0977 5 0.375 -1 -9999 -9999 -9999 -9999"]
+  for name, text in (('space', user), ('comma', user.replace(' ', ','))):
+    src = tmp_path / f'{name}.txt'
+    src.write_text(text)
+    out = tmp_path / f'{name}_out.txt'
+    assert trim_boxes(load_boxes(str(src)), str(out), 1, 3) == 5
+    assert out.read_text().splitlines() == expected, name
+  # MOTChallenge det file: 1-based, comma, 10 columns
+  mot = tmp_path / 'det.txt'
+  mot.write_text('1,-1,10.5,20,30,40,0.9,-1,-1,-1\n2,-1,11.5,20,30,40,0.8,-1,-1,-1\n')
+  out = tmp_path / 'mot_out.txt'
+  trim_boxes(load_boxes(str(mot)), str(out), 0, 1)
+  assert out.read_text().splitlines() == ['0 -1 10.5 20 30 40 0.9 -1 -1 -1 -9999 -9999 -9999 -9999',
+                                          '1 -1 11.5 20 30 40 0.8 -1 -1 -1 -9999 -9999 -9999 -9999']
+  # another column order (x1 y1 x2 y2, no id / class): rebuilt in the dump layout
+  xy = tmp_path / 'xyxy.txt'
+  xy.write_text('5 10 20 40 60 0.9\n6 11 20 41 60 0.8\n')
+  lay = Layout.from_spec('frame=0,x=1,y=2,w=3,h=4,conf=5')
+  lay.box = 'xyxy'
+  out = tmp_path / 'xy_out.txt'
+  trim_boxes(load_boxes(str(xy), lay), str(out), 5, 6)
+  assert out.read_text().splitlines() == ['0 -1 10 20 30 40 0.9 -1 -1 -1 -9999 -9999 -9999 -9999',
+                                          '1 -1 11 20 30 40 0.8 -1 -1 -1 -9999 -9999 -9999 -9999']
+
+
 def test_malformed_lines_are_reported(tmp_path):
   p = tmp_path / 'bad.txt'
   p.write_text('0 1 10 10 20 20 0.9 1 0.5\nnot a box\n1 2 10 10 -5 20 0.9 1 0.5\n')

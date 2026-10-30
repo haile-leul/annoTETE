@@ -213,9 +213,17 @@ out/annotations/<video>.txt        same layout as the input, track id in the id 
 out/annotations_mot/<video>.txt    MOTChallenge gt: frame(1-based),id,x,y,w,h,1,class,1
 out/annotations_json/<video>.json  per track: [frame, x, y, w, h, det_index, kind]
 out/videos/<video>.mp4             trimmed export only
-out/detections/<video>.txt         trimmed export only: the input boxes of the range
+out/detections/<video>.txt         trimmed export only: the input boxes of the range (see below)
 out/videos_annotated/<video>.mp4   "annotated video" / --video: boxes + ids drawn on the frames
 ```
+
+`detections/<video>.txt` (also written by `annotete trim`) always uses the detector
+dump layout, whatever the input looked like: space separated, frames renumbered so
+the first frame of the range is 0,
+`frame id x y w h conf class quality -1 -9999 -9999 -9999 -9999`.
+Lines already in that column order keep their values (and extra columns) verbatim,
+only the frame changes; comma separated, MOT or custom layouts are rebuilt from the
+parsed values and padded with `-1 -9999 -9999 -9999 -9999`.
 
 The annotated video covers the same frames as the rest of the export (the range
 when trimmed). Each track has the same color as in the app, with its id (and

@@ -261,6 +261,32 @@ def _num(v, col, default):
     return default
 
 
+# The detector dump layout, used for exported detection files whatever the
+# input looked like: space separated, 0-based frames,
+#   frame id x y w h confidence class quality extra1 .. extra5
+CANON_EXTRAS = ('-1', '-9999', '-9999', '-9999', '-9999')
+CANON_COLS = 9 + len(CANON_EXTRAS)
+
+
+def canonical_line(dets, i, frame):
+  """Detection i as a line of the detector dump layout, on (0-based) `frame`.
+  A file already in that column order keeps every token as it is (only the
+  frame changes and commas become spaces); other layouts are rebuilt from the
+  parsed values, with the default extras -1 -9999 -9999 -9999 -9999."""
+  lay = dets.layout
+  parsed = [str(int(frame)), str(int(dets.src_id[i])), *(_fmt_num(v, dets.int_coords) for v in dets.box[i]),
+            _fmt_num(dets.conf[i], False), str(int(dets.cls[i])), _fmt_num(dets.quality[i], False)]
+  if lay.cols == BASE_COLS and lay.box == 'tlwh':
+    tok = _split(dets.lines[i])
+    tok = tok + parsed[len(tok):9] if len(tok) < 9 else tok  # missing conf / class / quality
+    tok[0] = parsed[0]
+  else:
+    tok = parsed
+  if len(tok) < CANON_COLS:
+    tok = tok + list(CANON_EXTRAS[len(tok) - 9:])
+  return ' '.join(tok)
+
+
 def _fmt_num(x, as_int):
   if as_int:
     return str(int(round(x)))

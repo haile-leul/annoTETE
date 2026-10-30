@@ -5,7 +5,7 @@ import subprocess
 
 import cv2
 
-from .formats import BoxWriter
+from .formats import canonical_line
 
 
 def has_ffmpeg():
@@ -81,13 +81,13 @@ def _count(path):
 
 
 def trim_boxes(dets, dst, a, b):
-  """Input box lines with frame in a..b, frames shifted so a becomes 0 (in the
-  file's own frame base); everything else verbatim."""
-  w = BoxWriter(dets)
+  """Input detections with frame in a..b, renumbered so a is frame 0, written
+  in the detector dump layout (space separated, 0-based:
+  frame id x y w h conf class quality extras) whatever the input layout was."""
   lo = int(dets.frame.searchsorted(a, 'left'))
   hi = int(dets.frame.searchsorted(b, 'right'))
   os.makedirs(os.path.dirname(dst) or '.', exist_ok=True)
   with open(dst, 'w') as f:
     for i in range(lo, hi):
-      f.write(w.det_line(i, frame=int(dets.frame[i]) - a) + '\n')
+      f.write(canonical_line(dets, i, int(dets.frame[i]) - a) + '\n')
   return hi - lo
