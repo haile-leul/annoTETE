@@ -13,7 +13,7 @@ import { get, post, item } from '../../api.js';
 import { FrameLoader } from '../../frames.js';
 import { Viewer } from '../../viewer.js';
 import { Timeline } from '../../timeline.js';
-import { $, h, idColor, toast, debounce, fmtTime, menu, prompt, confirm, clamp, store } from '../../util.js';
+import { $, h, idColor, toast, debounce, fmtTime, menu, hideMenu, prompt, confirm, clamp, store } from '../../util.js';
 import { BoxCache } from './boxes.js';
 import * as panels from './panels.js';
 
@@ -542,14 +542,11 @@ export class TrackingTask {
     if (hit && hit.kind === 'det') {
       const d = hit.item;
       const items = [{ header: `detection · ${this.className(d[6])} · conf ${d[5]}` }];
-      if (this.active != null) items.push({ label: `Give id #${this.active}`, key: 'click', act: () => this.paint(d) });
-      items.push({ label: 'New track', key: 'Shift+click', act: () => this.paint(d, true) });
+      items.push({ label: `New track (#${this.meta.next_id})`, key: 'Shift+click', act: () => this.paint(d, true) });
+      items.push({ label: 'Give id …', key: '▸', act: () => this.idPicker(ev.clientX, ev.clientY, d) });
+      if (this.active != null && !this.brushNew) items.push({ label: `Give brush id #${this.active}`, key: 'click', act: () => this.paint(d) });
       const prop = this.props.proposals.find((q) => q.det === d[0]);
       if (prop) items.push({ label: `Accept proposal #${prop.track}`, act: () => this.cmd('assign', { frame: f, det: d[0], track: prop.track }) });
-      items.push({ label: 'Give id ...', act: async () => {
-        const v = await prompt('Assign id', 'Track id (new or existing)', String(this.meta.next_id));
-        if (v && /^\d+$/.test(v.trim())) { const id = await this.cmd('assign', { frame: f, det: d[0], track: Number(v) }); this.setActive(id); }
-      } });
       items.push('-', { label: 'All free detections here → new tracks', key: 'Shift+N', act: () => this.newTracksHere() });
       menu(ev.clientX, ev.clientY, items);
       return;
@@ -577,6 +574,78 @@ export class TrackingTask {
       { label: 'Draw a box', key: 'B', act: () => { this.pending = { mode: 'draw' }; this.updateChips(); } },
       { label: 'Fit view', key: 'dbl-click', act: () => this.viewer.fit() },
     ]);
+  }
+
+  // Tracks with no box on frame f, latest seen first (then ones that only start later).
+  lostTracks(f) {
+    const past = [], future = [];
+    for (const t of this.tracks) {
+      if (!t.visible || t.runs.some(([a, b]) => a <= f && f <= b)) continue;
+      const before = t.runs.filter(([, b]) => b < f).map(([, b]) => b);
+      if (before.length) past.push({ t, last: Math.max(...before) });
+      else future.push({ t, next: Math.min(...t.runs.map(([a]) => a)) });
+    }
+    past.sort((x, y) => y.last - x.last || x.t.id - y.t.id);
+    future.sort((x, y) => x.next - y.next || x.t.id - y.t.id);
+    return past.concat(future);
+  }
+
+  // "Give id …": pick a lost track for detection d (or type any id).
+  idPicker(x, y, d) {
+    const f = this.frame;
+    const lost = this.lostTracks(f);
+    let rows = [];
+    let sel = 0;
+    const give = async (id) => {
+      hideMenu();
+      const r = await this.cmd('assign', { frame: f, det: d[0], track: id });
+      this.setActive(r);
+      toast(`Detection → #${r}`);
+    };
+    const input = h('input', { type: 'text', class: 'pick-in', placeholder: `filter, or type any id (new: ${this.meta.next_id})`, autocomplete: 'off' });
+    const list = h('div', { class: 'pick-list' });
+    const render = () => {
+      const q = input.value.trim();
+      rows = lost.filter((x) => !q || String(x.t.id).startsWith(q));
+      sel = Math.min(sel, Math.max(0, rows.length - 1));
+      list.innerHTML = '';
+      rows.forEach((x, i) => {
+        const when = x.last != null ? `seen ${f - x.last} fr ago` : `starts in ${x.next - f} fr`;
+        list.append(h('div', { class: `mi${i === sel ? ' sel' : ''}`, onclick: () => give(x.t.id), onmouseenter: () => { sel = i; mark(); } },
+          h('span', {}, h('span', { class: 'sw', style: { background: idColor(x.t.id) } }), h('b', {}, `#${x.t.id}`),
+            h('span', { class: 'muted' }, `  ${this.className(x.t.cls)}`)),
+          h('span', { class: 'when' }, when)));
+      });
+      if (!rows.length) {
+        list.append(h('div', { class: 'pick-empty' }, /^\d+$/.test(q) ? `Enter: give id #${q}${this.trackById.has(Number(q)) ? ' (existing track)' : ' (new)'}`
+          : lost.length ? 'no match' : 'no lost tracks: every track is on this frame'));
+      }
+    };
+    const mark = () => [...list.children].forEach((el, i) => el.classList.toggle('sel', i === sel));
+    input.addEventListener('input', () => { sel = 0; render(); });
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') return; // closes the menu
+      e.stopPropagation();
+      const q = input.value.trim();
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        sel = Math.max(0, Math.min(rows.length - 1, sel + (e.key === 'ArrowDown' ? 1 : -1)));
+        mark();
+        const el = list.children[sel]; // keep it in view (scroll the list only, never the page)
+        if (el) {
+          const top = el.offsetTop - list.offsetTop;
+          if (top < list.scrollTop) list.scrollTop = top;
+          else if (top + el.offsetHeight > list.scrollTop + list.clientHeight) list.scrollTop = top + el.offsetHeight - list.clientHeight;
+        }
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (rows.length) give(rows[sel].t.id);
+        else if (/^\d+$/.test(q)) give(Number(q));
+      }
+    });
+    render();
+    menu(x, y, [{ header: 'Give id: lost tracks, latest seen first' }, { el: input }, { el: list }]);
+    setTimeout(() => input.focus(), 0);
   }
 
   className(c) {
@@ -919,6 +988,7 @@ export const KEYMAP = [
   ['Assign ids', [
     ['click free box', 'give it the brush id (no brush: new track)'],
     ['Shift+click', 'always a new track'],
+    ['right click → Give id …', 'pick a lost track (latest seen first) or type any id'],
     ['Space', 'accept proposals, jump one step'],
     ['Shift+Space', 'auto-advance until something needs you'],
     ['Enter', 'accept proposals here'],

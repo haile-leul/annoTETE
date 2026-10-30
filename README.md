@@ -39,9 +39,11 @@ click every frame:
    * two ids swapped → click one, <kbd>X</kbd>, click the other.
    * new object → <kbd>Shift</kbd>+click it (or <kbd>Shift</kbd>+<kbd>N</kbd> for all free boxes).
    * object left → do nothing: a track simply ends at its last keyframe.
-   * object back after being lost → make its old id the brush (type `7`
-     <kbd>Enter</kbd>, click `7` in the track list, or click its `7 lost` tag) and
-     click its box. The frames in between are filled if the gap is shorter than
+   * object back after being lost → right click its box → *Give id …*: a list of
+     the tracks that are not on this frame, latest seen first (type to filter,
+     <kbd>↑</kbd><kbd>↓</kbd> <kbd>Enter</kbd>, or type any id). Or make its old id
+     the brush (type `7` <kbd>Enter</kbd>, click `7` in the track list, or click
+     its `7 lost` tag) and click its box. The frames in between are filled if the gap is shorter than
      *max interpolation gap*; mark them absent with <kbd>O</kbd> if it was hidden.
    A forward step (<kbd>Space</kbd> or <kbd>D</kbd>) **stops early** on the first frame
    where an object that no track explains shows up (it must last a few frames, so

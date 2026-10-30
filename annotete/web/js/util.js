@@ -77,13 +77,15 @@ export function confirm(title, text, okLabel = 'OK', danger = false) {
       h('button', { class: danger ? 'primary danger' : 'primary', onclick: () => close(true) }, okLabel))));
 }
 
-// Context menu: items = [{label, key, act, danger} | '-' | {header}]
+// Context menu: items = [{label, key, act, danger} | '-' | {header} | {el: HTMLElement}]
+// An item's act() may open another menu() in its place (e.g. a picker).
 export function menu(x, y, items) {
   const m = document.getElementById('menu');
   m.innerHTML = '';
   for (const it of items) {
     if (it === '-') { m.append(h('div', { class: 'sep' })); continue; }
     if (it.header) { m.append(h('div', { class: 'hd' }, it.header)); continue; }
+    if (it.el) { m.append(it.el); continue; }
     m.append(h('div', {
       class: `mi ${it.danger ? 'danger' : ''}`,
       onclick: () => { hideMenu(); it.act(); },
@@ -95,8 +97,16 @@ export function menu(x, y, items) {
   m.style.top = `${Math.min(y, innerHeight - r.height - 6)}px`;
   setTimeout(() => document.addEventListener('mousedown', outside, { once: true }), 0);
   function outside(e) { if (!m.contains(e.target)) hideMenu(); else document.addEventListener('mousedown', outside, { once: true }); }
+  document.addEventListener('keydown', menuKey, true);
+  return m;
 }
-export function hideMenu() { document.getElementById('menu').classList.add('hidden'); }
+function menuKey(e) { // Esc closes an open menu (and nothing else)
+  if (e.key === 'Escape') { e.stopPropagation(); e.preventDefault(); hideMenu(); }
+}
+export function hideMenu() {
+  document.getElementById('menu').classList.add('hidden');
+  document.removeEventListener('keydown', menuKey, true);
+}
 
 export const store = {
   get(k, d) { try { const v = localStorage.getItem(`annotete:${k}`); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },

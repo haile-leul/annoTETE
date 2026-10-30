@@ -157,6 +157,13 @@ label.tog { display: flex; gap: 6px; align-items: center; cursor: pointer; }
 .menu .mi.danger { color: var(--danger); }
 .menu .sep { height: 1px; background: var(--line); margin: 4px 0; }
 .menu .hd { padding: 4px 10px; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .5px; }
+.menu .pick-in { width: calc(100% - 8px); margin: 2px 4px 4px; }
+.menu .pick-list { max-height: 186px; overflow-y: auto; min-width: 260px; } /* ~6 rows, then scroll */
+.menu .pick-list .mi { align-items: center; }
+.menu .pick-list .mi.sel { background: #2a323d; }
+.menu .pick-list .sw { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 7px; }
+.menu .pick-list .when { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.menu .pick-empty { padding: 6px 10px; color: var(--muted); font-size: 12px; }
 
 /* setup */
 .setup { height: 100%; overflow: auto; display: flex; justify-content: center; padding: 40px 16px; }
