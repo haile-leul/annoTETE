@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>evaluATE</title>
+<link rel="stylesheet" href="/css/app.css">
+<link rel="stylesheet" href="/css/evaluate.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M5 26V14M12 26V6M19 26v-9M26 26V10' stroke='%23f5a524' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E">
+</head>
+<body>
+<div id="app" class="evapp">
+  <header class="topbar">
+    <button class="brand switch" id="brand" title="Switch between annoTETE and evaluATE">evaluATE <span class="muted">⇄</span></button>
+    <div class="crumbs" id="crumbs"></div>
+    <div class="spacer"></div>
+    <span class="muted small" id="runInfo"></span>
+    <button id="setupBtn">Inputs</button>
+    <button id="helpBtn" title="What the numbers mean">?</button>
+  </header>
+
+  <!-- inputs -->
+  <section class="evpage hidden" id="setup"></section>
+
+  <!-- results overview -->
+  <section class="evpage hidden" id="overview"></section>
+
+  <!-- one video -->
+  <section class="evvideo hidden" id="video">
+    <div class="vmain">
+      <div class="viewer" id="viewer">
+        <canvas id="canvas"></canvas>
+        <div class="hud tl" id="hudFrame"></div>
+        <div class="hud tr evbanner" id="hudEvent"></div>
+        <div class="hud bl" id="hudHover"></div>
+        <button class="fitbtn hidden" id="fitBtn">&#10530; fit</button>
+        <div class="loading hidden" id="loading"></div>
+      </div>
+      <div class="transport">
+        <button class="icon" data-act="back" title="Back to all videos">&#8592; all videos</button>
+        <button class="icon" data-act="prevEvent" title="Previous event ([)">&#9198;</button>
+        <button class="icon" data-act="prev" title="Previous frame (&larr;)">&#9664;</button>
+        <button class="icon play" data-act="play" title="Play / pause (Space)">&#9654;</button>
+        <button class="icon" data-act="next" title="Next frame (&rarr;)">&#9654;&#xFE0E;</button>
+        <button class="icon" data-act="nextEvent" title="Next event (])">&#9197;</button>
+        <span class="mono" id="frameLabel"></span>
+        <div class="spacer"></div>
+        <label class="tog"><input type="checkbox" id="optGt" checked> ground truth</label>
+        <label class="tog"><input type="checkbox" id="optTrk" checked> tracker</label>
+        <label class="tog"><input type="checkbox" id="optTrails" checked> trails</label>
+        <label class="tog"><input type="checkbox" id="optLabels" checked> labels</label>
+      </div>
+      <div class="evtimeline">
+        <canvas id="tlRuler"></canvas>
+        <div class="tlwrap" id="tlWrap"><canvas id="tlRows"></canvas></div>
+      </div>
+    </div>
+    <aside class="side" id="vside"></aside>
+  </section>
+</div>
+<div id="toasts"></div>
+<div id="modalRoot"></div>
+<div id="menu" class="menu hidden"></div>
+<script type="module" src="/js/evaluate/app.js"></script>
+</body>
+</html>

@@ -229,6 +229,77 @@ and extra columns untouched). Interpolated or hand drawn boxes get `-1` in the
 columns that have no value (confidence, quality, extras). Uncheck *include
 interpolated boxes* (or `--no-interp`) to export only detection backed boxes.
 
+## evaluATE: how good is my tracker?
+
+evaluATE scores tracker outputs against the ground truth you made with annoTETE,
+shows where and why the tracker fails, and compares two tracker versions.
+
+```bash
+python -m evaluate                                  # opens the evaluATE page
+python -m evaluate --gt my_project/export --tracker runs/v2
+python -m evaluate --gt my_project/export --tracker runs/v2 --tracker2 runs/v1    # compare
+python -m evaluate --gt my_project/export --tracker runs/v2 --report             # text only
+```
+
+You can also click **annoTETE ⇄** at the top left of either page to switch between the
+two apps. `python -m annotete evaluate …` does the same as `python -m evaluate`; with
+`pip install -e .` the command is `evaluatete`.
+
+**Inputs**
+* **Ground truth**: an annoTETE export folder. It uses `annotations_mot/` (ground
+  truth), `annotations_json/` (which boxes had a detection behind them) and `videos/`
+  (the trimmed clips) when they are there. The export dialog ticks MOT + JSON by
+  default; tick *trimmed* to get the clips.
+* **Tracker output**: one file per video, named like the video (`cam1.txt`,
+  `cam1_tracks.txt`, `cam1/…`), in any layout annoTETE reads (space or comma,
+  MOTChallenge, 0- or 1-based frames). The frame alignment is detected: the tracker may
+  have run on the exported clip or on the full video (the offset is found and shown).
+  Only tracker boxes of the annotated classes are used (option: all).
+
+**Scores**: HOTA (with DetA, AssA, DetRe/Pr, AssRe/Pr, LocA), CLEAR (MOTA, MOTP,
+IDSW, Frag, MT/PT/ML), Identity (IDF1, IDR, IDP) and counts. This is a
+re-implementation of [TrackEval](https://github.com/JonathonLuiten/TrackEval)'s
+metrics (`annotete/evaluate/metrics.py`). On random test sequences it gives exactly the
+same numbers as the original code; `tests/test_evaluate.py` checks this whenever
+TrackEval is installed. It needs only numpy (scipy is used when present).
+
+**Detector vs tracker**: every score is computed twice:
+* *All annotations*: every annotated box counts, including the ones you interpolated or
+  drew because the detector had nothing.
+* *Detector-visible only*: those boxes become "don't care" regions, like TrackEval's
+  distractors. Tracker boxes there are neither right nor wrong. This is the best the
+  tracker can do with this detector.
+
+The gap between the two is what the detector's misses cost. The *Detector vs tracker*
+panel also splits the boxes the tracker missed into **no detection there** (a detector
+problem) and **the detector had a box but the tracker dropped it** (a tracker
+problem). It shows how many detector gaps the tracker filled by itself.
+
+**Where it goes wrong**: click a video to see it frame by frame:
+* tracker boxes in their id's colour with `T7 → obj 3`, false boxes dashed red, missed
+  objects dashed (red = the detector had a box, purple = it had none);
+* trails and a per-object timeline coloured by the tracker id that had the object, so
+  an id switch is a colour change;
+* an event list, each event jumping to its frame and zooming to the objects involved:
+  * **swap**: two objects exchange tracker ids;
+  * **id jump**: a tracker id moves to another object;
+  * **new id**: the object restarts with a new id;
+  * **switch**;
+  * **lost**: the object is not tracked for a while, and the event says whether the
+    detector had boxes during the gap;
+  * **ghost**: a tracker id that follows nothing.
+
+  Short gaps where only the detector blinked and the tracker kept the id are counted,
+  not listed. Keys: <kbd>←</kbd> <kbd>→</kbd> frame, <kbd>Space</kbd> play,
+  <kbd>[</kbd> <kbd>]</kbd> previous / next event, <kbd>Esc</kbd> back.
+
+**Comparing two trackers** (*Compare with* = your previous version): every score shows
+the change, events are tagged **fixed** (gone in the new version) or **new**
+(regressions), and each video row shows the counts.
+
+Each run also saves a report (JSON + CSV, per video and combined, both variants) in
+`<export>/evaluation/`.
+
 ## Projects and safety
 
 A project is a folder (default `./annotete_projects/<videos name>`, or `--project`):
@@ -272,7 +343,10 @@ annotete/
   web/
     index.html, css/, js/  app shell, viewer (zoom/pan), timeline, setup
     js/tasks/tracking/     the tracking UI (interactions, shortcuts, panels)
-tests/                   pytest: formats, pairing, fill, commands (+ fuzzed undo/redo), export/trim, API
+  evaluate/             evaluATE: metrics (TrackEval re-implementation), data + alignment,
+                        events, runner, API; page annotete/web/evaluate.html, js/evaluate/
+evaluate/               `python -m evaluate` (starts annotete.evaluate)
+tests/                   pytest: formats, pairing, fill, commands (+ fuzzed undo/redo), export/trim, API, evaluATE
 ```
 
 * **New data type** (e.g. a stereo rig): a class in `sources/` with

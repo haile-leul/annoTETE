@@ -8,7 +8,9 @@ export function h(tag, attrs = {}, ...children) {
   for (const [k, v] of Object.entries(attrs || {})) {
     if (v == null || v === false) continue;
     if (k === 'class') el.className = v;
-    else if (k === 'style' && typeof v === 'object') Object.assign(el.style, v);
+    else if (k === 'style' && typeof v === 'object') {
+      for (const [sk, sv] of Object.entries(v)) { if (sk.startsWith('--')) el.style.setProperty(sk, sv); else el.style[sk] = sv; }
+    }
     else if (k.startsWith('on')) el.addEventListener(k.slice(2), v);
     else if (k === 'html') el.innerHTML = v;
     else el.setAttribute(k, v === true ? '' : v);
@@ -114,3 +116,14 @@ export const store = {
 };
 
 export const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+// annoTETE <-> evaluATE (the brand button at the top left of both pages)
+export function switchApp(e) {
+  const r = e.currentTarget.getBoundingClientRect();
+  const here = location.pathname.startsWith('/evaluate') ? 'evaluate' : 'annotate';
+  menu(r.left, r.bottom + 4, [
+    { header: 'switch to' },
+    { label: `annoTETE · annotate${here === 'annotate' ? '  (here)' : ''}`, act: () => { if (here !== 'annotate') location.href = '/'; } },
+    { label: `evaluATE · evaluate trackers${here === 'evaluate' ? '  (here)' : ''}`, act: () => { if (here !== 'evaluate') location.href = '/evaluate'; } },
+  ]);
+}

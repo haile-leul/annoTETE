@@ -21,6 +21,7 @@ from .project import Project, parse_time, scan
 from .sources import open_source
 from .tasks import session_class
 from .tasks.tracking.annotation import EditError
+from .evaluate.api import ROUTES as EVAL_ROUTES
 
 WEB = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'web')
 MAX_OPEN = 3
@@ -156,8 +157,7 @@ class Handler(BaseHTTPRequestHandler):
       pass
 
   def _body(self):
-    n = int(self.headers.get('Content-Length') or 0)
-    return json.loads(self.rfile.read(n) or b'{}') if n else {}
+    return json.loads(self._raw or b'{}')
 
   def do_GET(self):
     self._dispatch('GET')
@@ -166,6 +166,11 @@ class Handler(BaseHTTPRequestHandler):
     self._dispatch('POST')
 
   def _dispatch(self, method):
+    # Always read the whole request body first: a body left unread (e.g. the
+    # page's "save" beacon on unload) would be glued to the next request on
+    # this keep-alive connection and break it.
+    n = int(self.headers.get('Content-Length') or 0)
+    self._raw = self.rfile.read(n) if n > 0 else b''
     url = urlparse(self.path)
     q = {k: v[-1] for k, v in parse_qs(url.query).items()}
     path = unquote(url.path)
@@ -191,6 +196,8 @@ class Handler(BaseHTTPRequestHandler):
   def _static(self, path):
     if path in ('', '/'):
       path = '/index.html'
+    elif path.rstrip('/') == '/evaluate':
+      path = '/evaluate.html'
     full = os.path.normpath(os.path.join(WEB, path.lstrip('/')))
     if not full.startswith(WEB) or not os.path.isfile(full):
       return self._send(404, dict(error='not found'))
@@ -374,7 +381,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 ITEM = r'/api/item/([^/]+)'
-ROUTES = [(m, re.compile(p), fn) for m, p, fn in [
+ROUTES = [(m, re.compile(p), fn) for m, p, fn in EVAL_ROUTES + [
   ('GET', r'/api/state', Handler.r_state),
   ('GET', r'/api/ls', Handler.r_ls),
   ('POST', r'/api/scan', Handler.r_scan),
@@ -400,7 +407,8 @@ ROUTES = [(m, re.compile(p), fn) for m, p, fn in [
 ]]
 
 
-def serve(app, host='127.0.0.1', port=8765, open_browser=True):
+def serve(app, host='127.0.0.1', port=8765, open_browser=True, page=''):
+  """page: what the browser opens, e.g. 'evaluate?gt=...' for evaluATE."""
   Handler.app = app
   httpd = None
   for p in range(port, port + 20):
@@ -416,7 +424,7 @@ def serve(app, host='127.0.0.1', port=8765, open_browser=True):
   url = f'http://{"localhost" if host in ("127.0.0.1", "0.0.0.0") else host}:{port}/'
   app.log(f'annoTETE {__version__} running at {url}  (Ctrl+C to stop; work is autosaved)')
   if open_browser:
-    threading.Timer(0.5, _open, (url,)).start()
+    threading.Timer(0.5, _open, (url + page,)).start()
   try:
     httpd.serve_forever(poll_interval=0.5)
   except KeyboardInterrupt:

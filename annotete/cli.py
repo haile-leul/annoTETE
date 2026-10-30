@@ -171,7 +171,8 @@ def main(argv=None):
   p.add_argument('--out', help='output folder (default: <project>/export)')
   p.add_argument('--trim', action='store_true', help='only the selected range of each video, renumbered from 0, '
                                                     'with the trimmed video and input boxes')
-  p.add_argument('--formats', default='txt', help='comma list of txt (input layout), mot, json')
+  p.add_argument('--formats', default='txt,mot,json', help='comma list of txt (input layout), mot, json '
+                                                         '(evaluATE uses mot + json)')
   p.add_argument('--no-interp', action='store_true', help='leave out interpolated boxes (no detection behind them)')
   p.add_argument('--video', action='store_true',
                  help='also write videos_annotated/<video>.mp4 with the boxes and ids drawn on the frames')
@@ -182,6 +183,12 @@ def main(argv=None):
   data_args(p)
   p.set_defaults(fn=cmd_info)
 
+  p = sub.add_parser('evaluate', help='evaluATE: score tracker outputs on an export (see python -m evaluate -h)',
+                     add_help=False)
+  p.set_defaults(fn=None)
+  if argv and argv[0] == 'evaluate':
+    from .evaluate.cli import main as evaluate_main
+    return evaluate_main(argv[1:])
   a = ap.parse_args(argv)
   a.fn(a)
 

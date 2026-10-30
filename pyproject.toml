@@ -12,9 +12,10 @@ dependencies = ["numpy", "opencv-python"]
 
 [project.scripts]
 annotete = "annotete.cli:main"
+evaluatete = "annotete.evaluate.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["annotete*"]
 
 [tool.setuptools.package-data]
-annotete = ["web/*.html", "web/css/*", "web/js/*.js", "web/js/tasks/*/*.js"]
+annotete = ["web/*.html", "web/css/*", "web/js/*.js", "web/js/*/*.js", "web/js/tasks/*/*.js"]

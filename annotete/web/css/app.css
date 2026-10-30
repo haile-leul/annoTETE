@@ -42,6 +42,8 @@ kbd { font: 11px var(--mono); background: var(--panel2); border: 1px solid var(-
 .topbar { display: flex; align-items: center; gap: 8px; padding: 0 10px; background: var(--panel); border-bottom: 1px solid var(--line); min-width: 0; }
 .brand { font-size: 15px; letter-spacing: .3px; color: var(--muted); margin-right: 6px; }
 .brand b { color: var(--accent); }
+.brand.switch { background: none; border: 0; font-size: 15px; padding: 4px 6px; }
+.brand.switch:hover { background: #20262f; }
 .itemnav { display: flex; gap: 4px; align-items: center; }
 #itemSelect { max-width: 260px; }
 .chips { display: flex; gap: 6px; align-items: center; min-width: 0; }

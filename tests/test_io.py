@@ -277,3 +277,26 @@ def test_export_annotated_video(dataset, tmp_path):
   # the left edge of the box (below the label) is drawn in the track's color
   edge = img[y + h // 2, max(0, x - 1):x + 2].astype(int)
   assert np.abs(edge - np.array(id_color(ids[0]))).sum(axis=1).min() < 90
+
+
+def test_unread_request_body_does_not_break_the_next_request(dataset, tmp_path):
+  """A POST whose body a route ignores (the page's save beacon) must not leak
+  into the next request on the same keep-alive connection."""
+  import http.client
+  from http.server import ThreadingHTTPServer
+  from annotete.server import App, Handler
+  p, _ = Project.create(str(tmp_path / 'proj'), str(dataset / 'videos'), str(dataset / 'dets'))
+  app = App(p, log=lambda m: None)
+  Handler.app = app
+  srv = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+  threading.Thread(target=srv.serve_forever, daemon=True).start()
+  try:
+    c = http.client.HTTPConnection('127.0.0.1', srv.server_address[1])
+    c.request('POST', '/api/save', body='{}', headers={'Content-Type': 'text/plain'})
+    assert c.getresponse().read() and True
+    c.request('GET', '/api/state')
+    r = c.getresponse()
+    assert r.status == 200 and json.loads(r.read())['project']
+  finally:
+    srv.shutdown()
+    app.shutdown()

@@ -1,6 +1,6 @@
 // App shell: project / item switching, settings, ranges, export, help.
 import { get, post, item } from './api.js';
-import { $, $$, h, toast, modal, debounce, store } from './util.js';
+import { $, $$, h, toast, modal, debounce, store, switchApp } from './util.js';
 import { renderSetup } from './setup.js';
 import { TrackingTask, KEYMAP, legend } from './tasks/tracking/index.js';
 import * as panels from './tasks/tracking/panels.js';
@@ -200,7 +200,8 @@ class App {
         h('label', { class: 'blk' }, 'Output folder ', h('span', { class: 'muted' }, '(', resetOut, ')')), out,
         h('label', { class: 'blk' }, 'Annotation formats'),
         h('div', { class: 'row' }, fmt('txt', 'same layout as the input (extra columns kept)', true)),
-        h('div', { class: 'row' }, fmt('mot', 'MOTChallenge gt (1-based)', false), fmt('json', 'JSON (with box kinds)', false)),
+        h('div', { class: 'row' }, fmt('mot', 'MOTChallenge gt (1-based)', true), fmt('json', 'JSON (with box kinds)', true)),
+        h('div', { class: 'muted small' }, 'evaluATE uses the MOT + JSON files of an export as ground truth.'),
         h('label', { class: 'blk' }, 'Options'),
         h('div', { class: 'row' }, h('label', { class: 'tog' }, trimmed, 'trimmed: only each video\'s range, renumbered from 0, plus the cut video and its input boxes')),
         h('div', { class: 'row' }, h('label', { class: 'tog' }, interp, 'include interpolated boxes (no detection behind them)')),
@@ -263,6 +264,7 @@ class App {
     $('#exportBtn').onclick = () => this.exportDialog();
     $('#projectBtn').onclick = () => this.projectDialog();
     $('#helpBtn').onclick = () => this.helpDialog();
+    $('#brand').onclick = (e) => switchApp(e);
     $('#fitBtn').onclick = (e) => { if (this.task) this.task.viewer.fit(); e.currentTarget.blur(); };
     for (const b of $$('.tabs button')) {
       b.onclick = () => {
