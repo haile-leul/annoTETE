@@ -23,9 +23,7 @@ export function renderSetup(root, project, onReady) {
   const [videos, vdl] = pathInput('sVideos', last.videos, '/data/videos   or   /data/videos/cam1.mp4');
   const [boxes, bdl] = pathInput('sBoxes', last.boxes, '/data/dets   or   /data/dets/cam1.txt   (optional)');
   const [proj, pdl] = pathInput('sProject', last.project, 'folder for the project (annotations are saved here)');
-  const format = h('select', {}, h('option', { value: 'auto' }, 'auto detect'),
-    h('option', { value: 'txt' }, 'txt: frame id x y w h conf class quality … (0-based)'),
-    h('option', { value: 'mot' }, 'MOTChallenge: comma separated, 1-based'),
+  const format = h('select', {}, h('option', { value: 'auto' }, 'frame id x y w h conf class quality … (also MOTChallenge)'),
     h('option', { value: 'custom' }, 'custom columns …'));
   const custom = h('input', { type: 'text', value: 'frame=0,id=1,x=2,y=3,w=4,h=5,conf=6,cls=7,quality=8', class: 'hidden' });
   format.addEventListener('change', () => custom.classList.toggle('hidden', format.value !== 'custom'));
@@ -39,6 +37,10 @@ export function renderSetup(root, project, onReady) {
   let classSel = null;
 
   const fmt = () => (format.value === 'custom' ? custom.value : format.value);
+  const base = h('select', {}, h('option', { value: 'auto' }, 'detect'),
+    h('option', { value: '0' }, 'start at 0'), h('option', { value: '1' }, 'start at 1 (MOTChallenge)'));
+  base.value = last.frameBase || 'auto';
+  base.addEventListener('change', () => { if (previewCard.classList.contains('hidden')) return; scan(); });
 
   async function scan() {
     preview.innerHTML = '';
@@ -46,7 +48,7 @@ export function renderSetup(root, project, onReady) {
     if (!videos.value.trim()) { toast('Give the videos path', 'err'); return null; }
     preview.append(h('p', { class: 'muted' }, 'scanning …'));
     try {
-      const r = await post('/api/scan', { videos: videos.value.trim(), boxes: boxes.value.trim(), format: fmt() });
+      const r = await post('/api/scan', { videos: videos.value.trim(), boxes: boxes.value.trim(), format: fmt(), frame_base: base.value });
       preview.innerHTML = '';
       const rows = r.items.map((e) => h('tr', {}, h('td', {}, e.name), h('td', { class: 'mono' }, e.media.split('/').slice(-2).join('/')),
         h('td', { class: 'mono', style: { color: e.boxes ? '' : '#f5a524' } }, e.boxes ? e.boxes.split('/').slice(-2).join('/') : 'no box file')));
@@ -55,7 +57,11 @@ export function renderSetup(root, project, onReady) {
       for (const w of r.warnings) preview.append(h('div', { class: 'warn' }, '⚠ ', w));
       if (r.preview) {
         const pv = r.preview;
-        preview.append(h('h4', { style: { marginTop: '14px' } }, `First box file: ${pv.n} boxes, layout "${pv.layout.name}", frames ${pv.layout.frame_base}-based, confidence ${pv.conf[0]}–${pv.conf[1]}`),
+        const L = pv.layout;
+        preview.append(h('h4', { style: { marginTop: '14px' } }, `First box file: ${pv.n} boxes, confidence ${pv.conf[0]}–${pv.conf[1]}`),
+          h('p', {}, h('b', {}, L.sep === ',' ? 'comma separated' : 'space separated'), ' (detected) · frame numbers ',
+            h('b', {}, `start at ${L.frame_base}`), ` (${L.base_reason})`,
+            pv.frames ? h('span', { class: 'muted' }, ` · boxes on video frames ${pv.frames[0]}–${pv.frames[1]} of 0–${pv.n_frames - 1}`) : ''),
           h('pre', {}, pv.lines.join('\n')));
         if (r.looks_like_tracks != null) {
           preview.append(h('p', { class: 'muted' }, r.looks_like_tracks
@@ -75,8 +81,8 @@ export function renderSetup(root, project, onReady) {
         }
       }
       if (!proj.value.trim()) {
-        const base = videos.value.trim().replace(/\/+$/, '');  // sibling folder: <videos>_annotete
-        proj.value = `${base.replace(/\.[^/.]+$/, '')}_annotete`;
+        const dir = videos.value.trim().replace(/\/+$/, '');  // sibling folder: <videos>_annotete
+        proj.value = `${dir.replace(/\.[^/.]+$/, '')}_annotete`;
       }
       return r;
     } catch (e) {
@@ -89,9 +95,9 @@ export function renderSetup(root, project, onReady) {
   async function create() {
     if (!proj.value.trim()) { await scan(); if (!proj.value.trim()) return; }
     const classes = classSel ? [...classSel].filter(([, cb]) => cb.checked).map(([c]) => c) : [];
-    const settings = { mode, format: fmt(), step: Number(step.value) || 10, classes,
+    const settings = { mode, format: fmt(), frame_base: base.value, step: Number(step.value) || 10, classes,
       min_conf: minConf.value === '' ? null : Number(minConf.value) };
-    store.set('setup', { videos: videos.value, boxes: boxes.value, project: proj.value, step: step.value, minConf: minConf.value, classes });
+    store.set('setup', { videos: videos.value, boxes: boxes.value, project: proj.value, step: step.value, minConf: minConf.value, classes, frameBase: base.value });
     try {
       const r = await post('/api/project', { root: proj.value.trim(), videos: videos.value.trim(), boxes: boxes.value.trim(), settings });
       for (const w of r.warnings || []) toast(w, '', 5000);
@@ -113,7 +119,8 @@ export function renderSetup(root, project, onReady) {
     h('div', { class: 'card' },
       fld('Videos', videos, 'a video file, a folder of videos, or image-sequence folders (MOT style seq/img1 works)'),
       fld('Box files', boxes, 'one file for one video, or a folder with files named like the videos (cam1.txt, cam1_dets.txt, cam1/det/det.txt)'),
-      fld('Format', h('div', {}, format, custom)),
+      fld('Columns', h('div', {}, format, custom), 'spaces or commas between columns are detected automatically'),
+      fld('Frame numbers', base, 'detect: 0 if a box is on frame 0; 1 for MOTChallenge style files (shown after Scan)'),
       fld('Mode', modeSeg),
       h('div', { class: 'row' }, h('button', { onclick: scan }, 'Scan'), h('span', { class: 'muted' }, 'check the pairing and pick classes')),
       vdl, bdl, pdl),

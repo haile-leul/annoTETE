@@ -28,7 +28,7 @@ def test_user_format(tmp_path):
   p = tmp_path / 'cam.txt'
   p.write_text(EXAMPLE)
   d = load_boxes(str(p))
-  assert d.layout.name == 'txt' and d.layout.frame_base == 0
+  assert d.layout.sep == ' ' and d.layout.frame_base == 0
   assert len(d) == 6 and d.classes() == {1: 2, 5: 4}
   assert d.frame.tolist() == [0, 0, 0, 1, 1, 2]
   assert d.box[0].tolist() == [408, 662, 169, 162]
@@ -46,7 +46,7 @@ def test_mot_and_custom_layouts(tmp_path):
   p = tmp_path / 'gt.txt'
   p.write_text('1,3,10.5,20,30,40,1,1,0.8\n2,3,11.5,20,30,40,1,1,0.9\n')
   d = load_boxes(str(p))
-  assert d.layout.name == 'mot' and d.frame.tolist() == [0, 1] and d.ids_look_like_tracks()
+  assert d.layout.sep == ',' and d.layout.frame_base == 1 and d.frame.tolist() == [0, 1] and d.ids_look_like_tracks()
   assert BoxWriter(d).det_line(1, track_id=9) == '2,9,11.5,20,30,40,1,1,0.9'
   q = tmp_path / 'xyxy.txt'
   q.write_text('# frame x1 y1 x2 y2 score\n5 10 20 40 60 0.9\n')
@@ -54,6 +54,34 @@ def test_mot_and_custom_layouts(tmp_path):
   lay.box = 'xyxy'
   d = load_boxes(str(q), lay)
   assert d.box[0].tolist() == [10, 20, 30, 40] and d.cls[0] == -1
+
+
+def test_separator_and_frame_base_detection(tmp_path):
+  space = tmp_path / 'space.txt'
+  space.write_text(EXAMPLE)
+  comma = tmp_path / 'comma.txt'
+  comma.write_text(EXAMPLE.replace(' ', ','))
+  a, b = load_boxes(str(space)), load_boxes(str(comma))
+  assert (a.layout.sep, b.layout.sep) == (' ', ',')
+  assert a.layout.frame_base == b.layout.frame_base == 0  # a box is on frame 0
+  assert a.frame.tolist() == b.frame.tolist() and np.array_equal(a.box, b.box)
+  assert a.classes() == b.classes() and a.conf.tolist() == b.conf.tolist()
+  # written back with the file's own separator
+  assert BoxWriter(b).det_line(0, track_id=7) == '0,7,408,662,169,162,71.6309,5,0.625,-1,-9999,-9999,-9999,-9999'
+  assert BoxWriter(b).box_line(4, 7, (10, 20, 30, 40), cls=5).startswith('4,7,10,20,30,40,-1,5,-1')
+  # comma + tab mixes and stray spaces after commas
+  mixed = tmp_path / 'mixed.txt'
+  mixed.write_text('0, 1, 10, 20, 30, 40, 0.9, 1, 0.5\n1,\t1, 11, 20, 30, 40, 0.9, 1, 0.5\n')
+  m = load_boxes(str(mixed))
+  assert m.layout.sep == ',' and m.frame.tolist() == [0, 1] and m.box[1].tolist() == [11, 20, 30, 40]
+  # 1-based: last box on frame n_frames (one past a 0-based end)
+  late = tmp_path / 'late.txt'
+  late.write_text('3 1 10 10 5 5 1 1 1\n50 1 10 10 5 5 1 1 1\n')
+  assert load_boxes(str(late), n_frames=50).layout.frame_base == 1
+  assert load_boxes(str(late), n_frames=60).layout.frame_base == 0
+  # forced either way
+  assert load_boxes(str(late), frame_base=1).frame.tolist() == [2, 49]
+  assert load_boxes(str(space), frame_base='1').layout.frame_base == 1
 
 
 def test_malformed_lines_are_reported(tmp_path):

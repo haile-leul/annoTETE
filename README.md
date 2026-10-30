@@ -153,15 +153,21 @@ the first match wins: `gate.txt`, `gate_<anything>.txt` (e.g. `gate_dets.txt`),
 `gate/det/det.txt`, `gate/gt/gt.txt`. Videos without boxes can still be
 annotated by drawing.
 
-**Formats** (`--format`, default `auto`):
+**Formats**: one box per line,
+`frame id x y w h confidence class quality [extra columns …]` (x, y = top-left),
+e.g. `0 16 408 662 169 162 71.6309 5 0.625 -1 -9999 -9999 -9999 -9999`.
+MOTChallenge files use the same first columns. **All extra columns are kept**
+and written back on export.
 
-* `txt`: whitespace separated, 0-based frames:
-  `frame id x y w h confidence class quality [extra columns …]`
-  (x, y = top-left). This is the detector dump format, e.g.
-  `0 16 408 662 169 162 71.6309 5 0.625 -1 -9999 -9999 -9999 -9999`.
-  **All extra columns are kept** and written back on export.
-* `mot`: MOTChallenge, comma separated, 1-based frames (auto detected by commas).
-* custom columns: `--format "frame=0,id=1,x=2,y=3,w=4,h=5,conf=6,cls=7,quality=8"`.
+* **Spaces or commas** between columns are detected per file (spaces after
+  commas and tabs are fine too). Exports use the same separator as the input.
+* **Frame numbers** (setup page *Frame numbers*, `--frame-base auto|0|1`):
+  *detect* uses 0 if any box is on frame 0, and 1 if the last box is on frame
+  N for an N-frame video, or if the file is comma separated and starts at
+  frame 1 (MOTChallenge). Otherwise it uses 0. *Scan* on the setup page shows
+  what was detected and why, and the *Data* tab shows it too.
+* Other column orders: `--format "frame=0,id=1,x=2,y=3,w=4,h=5,conf=6,cls=7,quality=8"`
+  (or *custom columns* on the setup page).
 
 **Classes**: pick which classes to annotate (`--classes 1,5`, the checkboxes after
 *Scan* on the setup page, or any time in *Data → Classes to annotate*); the other

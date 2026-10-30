@@ -109,7 +109,7 @@ def scan(videos, boxes=None):
   return [dict(name=media_name(m), media=m, boxes=pairs[m]) for m in media], warnings
 
 
-DEFAULT_SETTINGS = dict(task='tracking', mode='auto', format='auto', step=10, max_gap=300, classes=[], min_conf=None,
+DEFAULT_SETTINGS = dict(task='tracking', mode='auto', format='auto', frame_base='auto', step=10, max_gap=300, classes=[], min_conf=None,
                         class_names={})
 
 
@@ -177,8 +177,9 @@ class Project:
   def layout(self, item):
     return Layout.from_spec(self.settings.get('format') or 'auto', item.get('boxes'))
 
-  def load_boxes(self, item):
-    return load_boxes(item['boxes'], self.layout(item))
+  def load_boxes(self, item, n_frames=None):
+    """Box file of an item; `n_frames` (video length) helps detect the frame base."""
+    return load_boxes(item['boxes'], self.layout(item), self.settings.get('frame_base') or 'auto', n_frames)
 
   def ann_path(self, item):
     return os.path.join(self.ann_dir, item['name'] + '.json')

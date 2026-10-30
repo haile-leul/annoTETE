@@ -222,14 +222,18 @@ class Handler(BaseHTTPRequestHandler):
     entries, warnings = scan(b['videos'], b.get('boxes') or None)
     classes, preview = {}, None
     looks_tracks = None
-    first = next((e['boxes'] for e in entries if e['boxes']), None)
+    first = next((e for e in entries if e['boxes']), None)
     if first:
-      dets = load_boxes(first, b.get('format') or 'auto')
+      src = open_source(first['media'])
+      n_frames = src.n_frames
+      src.close()
+      dets = load_boxes(first['boxes'], b.get('format') or 'auto', b.get('frame_base') or 'auto', n_frames)
       classes = dets.classes()
       looks_tracks = dets.ids_look_like_tracks()
       warnings += dets.warnings
-      preview = dict(file=first, layout=dets.layout.to_dict(), n=len(dets), conf=dets.conf_range(),
-                     lines=dets.lines[:5])
+      preview = dict(file=first['boxes'], layout=dets.layout.to_dict(), n=len(dets), conf=dets.conf_range(),
+                     lines=dets.lines[:5], n_frames=n_frames,
+                     frames=[int(dets.frame.min()), int(dets.frame.max())] if len(dets) else None)
     self._send(200, dict(items=entries, warnings=warnings, classes=classes, looks_like_tracks=looks_tracks,
                          preview=preview))
 
@@ -256,7 +260,7 @@ class Handler(BaseHTTPRequestHandler):
     p = self.app.project
     with p.lock:
       for k, v in b.items():
-        if k in ('step', 'max_gap', 'classes', 'min_conf', 'class_names', 'format', 'mode'):
+        if k in ('step', 'max_gap', 'classes', 'min_conf', 'class_names', 'format', 'frame_base', 'mode'):
           p.settings[k] = v
       p.save()
     with self.app.lock:

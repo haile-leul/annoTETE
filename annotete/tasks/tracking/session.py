@@ -31,7 +31,7 @@ class TrackingSession:
     self.source = open_source(item['media'])
     self.frames = FrameServer(self.source) if frames else None
     if item.get('boxes'):
-      self.dets = project.load_boxes(item)
+      self.dets = project.load_boxes(item, self.source.n_frames)
       self.warnings += self.dets.warnings
       self.warnings += sanity_warnings(self.dets, self.source)
     else:

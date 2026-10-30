@@ -47,7 +47,8 @@ def cmd_serve(a):
       project = Project.open(root)
       print(f're-opened project {root} (delete it or pass --project to start fresh)')
     else:
-      project, warnings = Project.create(root, a.videos, a.dets, mode=a.mode, format=a.format, step=a.step,
+      project, warnings = Project.create(root, a.videos, a.dets, mode=a.mode, format=a.format,
+                                         frame_base=a.frame_base, step=a.step,
                                          classes=_classes(a.classes), min_conf=a.min_conf,
                                          class_names=_class_names(a.class_names), max_gap=a.max_gap)
       for w in warnings:
@@ -79,7 +80,8 @@ def cmd_trim(a):
     if warn:
       print('warning:', warn)
     if pairs[m]:
-      k = trim.trim_boxes(load_boxes(pairs[m], a.format), os.path.join(a.out, 'detections', name + '.txt'), s, e)
+      dets = load_boxes(pairs[m], a.format, a.frame_base, n)
+      k = trim.trim_boxes(dets, os.path.join(a.out, 'detections', name + '.txt'), s, e)
       print(f'  {k} boxes')
   print(f'done: {os.path.abspath(a.out)}')
 
@@ -106,12 +108,15 @@ def cmd_info(a):
   from .sources import open_source
   for e in entries:
     src = open_source(e['media'])
-    line = f'{e["name"]}: {src.n_frames} frames {src.width}x{src.height} @ {src.fps:.2f} fps'
+    n = src.n_frames
+    line = f'{e["name"]}: {n} frames {src.width}x{src.height} @ {src.fps:.2f} fps'
     src.close()
     if e['boxes']:
-      d = load_boxes(e['boxes'], a.format)
+      d = load_boxes(e['boxes'], a.format, a.frame_base, n)
       kind = 'tracks' if d.ids_look_like_tracks() else 'detections'
-      line += (f' | {os.path.basename(e["boxes"])}: {len(d)} boxes ({kind}, layout {d.layout.name}), '
+      sep = 'comma' if d.layout.sep == ',' else 'space'
+      line += (f' | {os.path.basename(e["boxes"])}: {len(d)} boxes ({kind}, {sep} separated, frames '
+               f'{d.layout.frame_base}-based: {d.layout.base_reason}), '
                f'classes {d.classes()}, conf {d.conf_range()[0]:g}..{d.conf_range()[1]:g}')
       warnings += d.warnings
     print(line)
@@ -131,8 +136,11 @@ def main(argv=None):
     p.add_argument('--videos', required=need_videos, help='a video, an image folder, or a folder of videos')
     p.add_argument('--dets', help='box file (single video) or folder of box files named like the videos')
     p.add_argument('--format', default='auto',
-                   help='box file layout: auto | txt (frame id x y w h conf class quality ..., 0-based frames) | '
-                        'mot (MOTChallenge, comma, 1-based) | columns e.g. "frame=0,id=1,x=2,y=3,w=4,h=5,conf=6,cls=7"')
+                   help='box file columns: auto (frame id x y w h conf class quality ...) | '
+                        'columns e.g. "frame=0,id=1,x=2,y=3,w=4,h=5,conf=6,cls=7". '
+                        'Space or comma separation is detected from the file.')
+    p.add_argument('--frame-base', default='auto', choices=['auto', '0', '1'],
+                   help='first frame number in the box files (auto: 0 if a box is on frame 0, 1 for MOT style files)')
 
   p = sub.add_parser('serve', help='start the annotator')
   data_args(p, False)

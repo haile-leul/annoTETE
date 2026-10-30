@@ -4,9 +4,15 @@ A `Layout` says which column holds the frame, id, box, confidence, class and
 quality. Every other column ("extras") is kept verbatim and written back on
 export, so nothing in the input is lost.
 
-Default layout (`txt`, the detector dump format):
-  frame id x y w h confidence class quality [extras ...]       frame 0-based
-`mot` is MOTChallenge: comma separated, 1-based frames, same first 9 columns.
+Default columns:  frame id x y w h confidence class quality [extras ...]
+(MOTChallenge uses the same first columns.)
+
+Two things are detected per file rather than tied to a preset:
+  separator    spaces/tabs or commas (also written back the same way)
+  frame base   0 if a box is on frame 0; 1 if the last box is on frame
+               n_frames (one past a 0-based end) or the file is comma
+               separated and starts at frame 1 (MOTChallenge); else 0.
+Both can be forced (`frame_base=0|1`, a custom layout's `sep`).
 """
 from __future__ import annotations
 
@@ -19,24 +25,33 @@ import numpy as np
 FIELDS = ('frame', 'id', 'x', 'y', 'w', 'h', 'conf', 'cls', 'quality')
 BASE_COLS = dict(frame=0, id=1, x=2, y=3, w=4, h=5, conf=6, cls=7, quality=8)
 PRESETS = {
-  'txt': dict(cols=BASE_COLS, frame_base=0, sep=' ', box='tlwh'),
-  'mot': dict(cols=BASE_COLS, frame_base=1, sep=',', box='tlwh'),
+  'auto': dict(cols=BASE_COLS, frame_base='auto', sep='auto', box='tlwh'),
+  'txt': dict(cols=BASE_COLS, frame_base=0, sep='auto', box='tlwh'),
+  'mot': dict(cols=BASE_COLS, frame_base=1, sep='auto', box='tlwh'),
 }
 BOX_MODES = ('tlwh', 'xyxy', 'cxcywh')
 
 
 class Layout:
-  def __init__(self, cols=None, frame_base=0, sep=' ', box='tlwh', name='custom'):
+  def __init__(self, cols=None, frame_base='auto', sep='auto', box='tlwh', name='custom'):
     self.cols = {k: int(v) for k, v in (cols or BASE_COLS).items() if v is not None and int(v) >= 0}
     for k in ('frame', 'x', 'y', 'w', 'h'):
       if k not in self.cols:
         raise ValueError(f'layout needs a "{k}" column')
     if box not in BOX_MODES:
       raise ValueError(f'box mode must be one of {BOX_MODES}')
-    self.frame_base = int(frame_base)
+    self.frame_base = 'auto' if frame_base in (None, 'auto') else int(frame_base)
+    if sep not in ('auto', ' ', ','):
+      raise ValueError('separator must be "auto", " " or ","')
     self.sep = sep
     self.box = box
     self.name = name
+    self.base_reason = 'given' if self.frame_base != 'auto' else ""
+
+  def copy(self):
+    lay = Layout(self.cols, self.frame_base, self.sep, self.box, self.name)
+    lay.base_reason = self.base_reason
+    return lay
 
   @classmethod
   def from_spec(cls, spec, path=None):
@@ -45,11 +60,9 @@ class Layout:
     if isinstance(spec, Layout):
       return spec
     if isinstance(spec, dict):
-      return cls(spec.get('cols'), spec.get('frame_base', 0), spec.get('sep', ' '), spec.get('box', 'tlwh'),
+      return cls(spec.get('cols'), spec.get('frame_base', 'auto'), spec.get('sep', 'auto'), spec.get('box', 'tlwh'),
                  spec.get('name', 'custom'))
     spec = (spec or 'auto').strip()
-    if spec == 'auto':
-      spec = sniff_preset(path) if path else 'txt'
     if spec in PRESETS:
       return cls(name=spec, **PRESETS[spec])
     cols = {}
@@ -62,21 +75,31 @@ class Layout:
     return cls(cols)
 
   def to_dict(self):
-    return dict(name=self.name, cols=self.cols, frame_base=self.frame_base, sep=self.sep, box=self.box)
+    return dict(name=self.name, cols=self.cols, frame_base=self.frame_base, sep=self.sep, box=self.box,
+                base_reason=self.base_reason)
 
   def min_cols(self):
     return max(self.cols.values()) + 1
 
 
-def sniff_preset(path):
-  """'mot' if the file is comma separated, else 'txt'."""
-  if path and os.path.isfile(path):
-    with open(path) as f:
-      for line in f:
-        s = line.strip()
-        if s and not s.startswith('#'):
-          return 'mot' if ',' in s else 'txt'
-  return 'txt'
+def sniff_sep(lines):
+  """',' if most data lines contain a comma, else ' ' (spaces / tabs)."""
+  n = sum(1 for s in lines if ',' in s)
+  return ',' if lines and n >= 0.5 * len(lines) else ' '
+
+
+def resolve_frame_base(raw_frames, sep, n_frames=None):
+  """(base, reason) for 'auto': see the module docstring."""
+  if not len(raw_frames):
+    return 0, 'no boxes, 0-based assumed'
+  lo, hi = int(np.min(raw_frames)), int(np.max(raw_frames))
+  if lo <= 0:
+    return 0, 'a box is on frame 0'
+  if n_frames and hi == n_frames:
+    return 1, f'the last box is on frame {hi} = number of video frames'
+  if sep == ',' and lo == 1:
+    return 1, 'comma separated and starting at frame 1 (MOTChallenge)'
+  return 0, f'first box on frame {lo}; 0-based assumed'
 
 
 def file_signature(path):
@@ -114,7 +137,12 @@ class Detections:
 
   @classmethod
   def empty(cls, layout=None):
-    return cls([], np.zeros((0, 4)), [], [], [], [], [], layout or Layout.from_spec('txt'), 9, True)
+    layout = (layout or Layout.from_spec('txt')).copy()
+    if layout.frame_base == 'auto':
+      layout.frame_base = 0
+    if layout.sep == 'auto':
+      layout.sep = ' '
+    return cls([], np.zeros((0, 4)), [], [], [], [], [], layout, 9, True)
 
   def __len__(self):
     return len(self.frame)
@@ -152,8 +180,13 @@ class Detections:
     return len(np.unique(ids)) <= 0.5 * len(ids)
 
 
-def load_boxes(path, layout='auto'):
-  layout = Layout.from_spec(layout, path)
+def load_boxes(path, layout='auto', frame_base=None, n_frames=None):
+  """Read a box file. `frame_base` ('auto', 0, 1 or None = the layout's)
+  overrides the layout; `n_frames` (video length) helps the 'auto' guess."""
+  layout = Layout.from_spec(layout, path).copy()
+  if frame_base is not None:
+    layout.frame_base = 'auto' if frame_base == 'auto' else int(frame_base)
+    layout.base_reason = 'given' if layout.frame_base != 'auto' else ""
   c = layout.cols
   need = layout.min_cols()
   frame, box, conf, cls, quality, src_id, lines = [], [], [], [], [], [], []
@@ -189,7 +222,7 @@ def load_boxes(path, layout='auto'):
         continue
       if int_coords:
         int_coords = all(_is_int(v[c[k]]) for k in ('x', 'y', 'w', 'h'))
-      frame.append(fr - layout.frame_base)
+      frame.append(fr)
       box.append(b)
       conf.append(_num(v, c.get('conf'), 1.0))
       cls.append(int(_num(v, c.get('cls'), -1)))
@@ -197,6 +230,11 @@ def load_boxes(path, layout='auto'):
       src_id.append(int(_num(v, c.get('id'), -1)))
       lines.append(s)
       ncols[len(v)] += 1
+  if layout.sep == 'auto':
+    layout.sep = sniff_sep(lines[:500])
+  if layout.frame_base == 'auto':
+    layout.frame_base, layout.base_reason = resolve_frame_base(frame, layout.sep, n_frames)
+  frame = [f - layout.frame_base for f in frame]
   warnings = []
   if bad:
     warnings.append(f'{os.path.basename(path)}: skipped {bad} malformed line(s) (first at line {first_bad})')
@@ -240,7 +278,7 @@ class BoxWriter:
     self.ncols = max(dets.ncols, self.layout.min_cols())
     self.int_coords = dets.int_coords
     self.lines = dets.lines
-    self.comma = self.layout.sep == ',' or (dets.lines and ',' in dets.lines[0])
+    self.comma = self.layout.sep == ','
 
   def _join(self, tokens):
     return ','.join(tokens) if self.comma else ' '.join(tokens)
