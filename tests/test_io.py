@@ -228,3 +228,30 @@ def test_constant_id_column_is_not_tracks(tmp_path):
   a = TrackingAnnotation(d, 20, 640, 480)
   a.import_tracks()
   assert sorted(a.tracks) == [0, 1] and a.tracks[0].n_boxes() == 20
+
+
+def test_reopening_a_project_uses_the_paths_given_now(dataset, tmp_path):
+  import shutil
+  # first run by mistake: another videos folder (same names), no box files
+  wrong = tmp_path / 'drawn'
+  shutil.copytree(dataset / 'videos', wrong)
+  root = str(tmp_path / 'proj')
+  p, _ = Project.open_or_create(root, str(wrong))
+  assert all(i['boxes'] is None and i['media'].startswith(str(wrong)) for i in p.items)
+  s = TrackingSession(p, p.items[0], frames=False)
+  s.save(force=True)  # an (empty) annotation file exists now
+  p.items[1]['status'] = 'done'
+  p.save()
+  # second run with the right folders into the same project folder
+  p2, warnings = Project.open_or_create(root, str(dataset / 'videos'), str(dataset / 'dets'), step=15)
+  assert all(i['boxes'] and i['media'].startswith(str(dataset / 'videos')) for i in p2.items)
+  assert p2.settings['step'] == 15 and p2.items[1]['status'] == 'done'
+  assert Project.open(root).items[0]['boxes']  # also on disk
+  s2 = TrackingSession(p2, p2.items[0], frames=False)
+  assert len(s2.dets) > 0 and s2.mode == 'detections'
+  # real annotations carry over by video name
+  s2.command('new_tracks', dict(frame=0))
+  s2.save()
+  p3, _ = Project.open_or_create(root, str(dataset / 'videos'), str(dataset / 'dets'))
+  assert p3.settings['step'] == 15  # None settings keep the saved value
+  assert TrackingSession(p3, p3.items[0], frames=False).tracks() == s2.tracks()

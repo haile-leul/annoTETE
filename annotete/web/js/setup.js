@@ -22,7 +22,14 @@ export function renderSetup(root, project, onReady) {
   };
   const [videos, vdl] = pathInput('sVideos', last.videos, '/data/videos   or   /data/videos/cam1.mp4');
   const [boxes, bdl] = pathInput('sBoxes', last.boxes, '/data/dets   or   /data/dets/cam1.txt   (optional)');
-  const [proj, pdl] = pathInput('sProject', last.project, 'folder for the project (annotations are saved here)');
+  // The project folder follows the videos path (<videos>_annotete) unless you type your own,
+  // so an old folder from a previous (maybe wrong) run is never picked up silently.
+  const suggest = (v) => (v.trim() ? `${v.trim().replace(/\/+$/, '').replace(/\.[^/.]+$/, '')}_annotete` : '');
+  let projAuto = !last.projectManual;
+  const [proj, pdl] = pathInput('sProject', projAuto ? suggest(last.videos || '') : last.project,
+    'folder for the project (annotations are saved here)');
+  videos.addEventListener('input', () => { if (projAuto) proj.value = suggest(videos.value); });
+  proj.addEventListener('input', () => { projAuto = !proj.value.trim(); });
   const format = h('select', {}, h('option', { value: 'auto' }, 'frame id x y w h conf class quality … (also MOTChallenge)'),
     h('option', { value: 'custom' }, 'custom columns …'));
   const custom = h('input', { type: 'text', value: 'frame=0,id=1,x=2,y=3,w=4,h=5,conf=6,cls=7,quality=8', class: 'hidden' });
@@ -80,10 +87,7 @@ export function renderSetup(root, project, onReady) {
             })));
         }
       }
-      if (!proj.value.trim()) {
-        const dir = videos.value.trim().replace(/\/+$/, '');  // sibling folder: <videos>_annotete
-        proj.value = `${dir.replace(/\.[^/.]+$/, '')}_annotete`;
-      }
+      if (!proj.value.trim() || projAuto) proj.value = suggest(videos.value);
       return r;
     } catch (e) {
       preview.innerHTML = '';
@@ -97,7 +101,7 @@ export function renderSetup(root, project, onReady) {
     const classes = classSel ? [...classSel].filter(([, cb]) => cb.checked).map(([c]) => c) : [];
     const settings = { mode, format: fmt(), frame_base: base.value, step: Number(step.value) || 10, classes,
       min_conf: minConf.value === '' ? null : Number(minConf.value) };
-    store.set('setup', { videos: videos.value, boxes: boxes.value, project: proj.value, step: step.value, minConf: minConf.value, classes, frameBase: base.value });
+    store.set('setup', { videos: videos.value, boxes: boxes.value, project: proj.value, projectManual: !projAuto, step: step.value, minConf: minConf.value, classes, frameBase: base.value });
     try {
       const r = await post('/api/project', { root: proj.value.trim(), videos: videos.value.trim(), boxes: boxes.value.trim(), settings });
       for (const w of r.warnings || []) toast(w, '', 5000);
@@ -126,7 +130,7 @@ export function renderSetup(root, project, onReady) {
       vdl, bdl, pdl),
     previewCard,
     h('div', { class: 'card' },
-      fld('Project folder', proj, 'created if missing; if it already has a project.json, that project is opened'),
+      fld('Project folder', proj, 'where annotations are saved. If it already holds a project, its saved annotations are continued (matched by video name); the videos and box files are always the ones above'),
       fld('Keyframe step', step, 'frames per jump (A / D / Space); change any time'),
       fld('Min confidence', minConf, 'ignore weaker boxes (can be changed later)'),
       h('div', { class: 'row', style: { justifyContent: 'flex-end' } },

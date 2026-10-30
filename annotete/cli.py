@@ -38,22 +38,20 @@ def default_project_dir(videos):
 def cmd_serve(a):
   from .server import App, serve
   project = None
-  if a.project and Project.exists(a.project):
+  if a.videos:  # the paths given now always win; an existing project only adds its saved annotations
+    root = a.project or default_project_dir(a.videos)
+    existed = Project.exists(root)
+    project, warnings = Project.open_or_create(root, a.videos, a.dets, mode=a.mode, format=a.format,
+                                               frame_base=a.frame_base, step=a.step,
+                                               classes=_classes(a.classes), min_conf=a.min_conf,
+                                               class_names=_class_names(a.class_names), max_gap=a.max_gap)
+    for w in warnings:
+      print('note:', w)
+    print(f'{"updated" if existed else "created"} project {root} ({len(project.items)} item(s), '
+          f'{sum(1 for i in project.items if i["boxes"])} with box files)')
+  elif a.project and Project.exists(a.project):
     project = Project.open(a.project)
     print(f'opened project {project.root} ({len(project.items)} item(s))')
-  elif a.videos:
-    root = a.project or default_project_dir(a.videos)
-    if Project.exists(root):
-      project = Project.open(root)
-      print(f're-opened project {root} (delete it or pass --project to start fresh)')
-    else:
-      project, warnings = Project.create(root, a.videos, a.dets, mode=a.mode, format=a.format,
-                                         frame_base=a.frame_base, step=a.step,
-                                         classes=_classes(a.classes), min_conf=a.min_conf,
-                                         class_names=_class_names(a.class_names), max_gap=a.max_gap)
-      for w in warnings:
-        print('warning:', w)
-      print(f'created project {root} ({len(project.items)} item(s))')
   elif a.project:
     sys.exit(f'no project in {a.project}; give --videos to create one')
   serve(App(project), a.host, a.port, not a.no_browser)
@@ -135,24 +133,24 @@ def main(argv=None):
   def data_args(p, need_videos=True):
     p.add_argument('--videos', required=need_videos, help='a video, an image folder, or a folder of videos')
     p.add_argument('--dets', help='box file (single video) or folder of box files named like the videos')
-    p.add_argument('--format', default='auto',
+    p.add_argument('--format', default=None,
                    help='box file columns: auto (frame id x y w h conf class quality ...) | '
                         'columns e.g. "frame=0,id=1,x=2,y=3,w=4,h=5,conf=6,cls=7". '
                         'Space or comma separation is detected from the file.')
-    p.add_argument('--frame-base', default='auto', choices=['auto', '0', '1'],
+    p.add_argument('--frame-base', default=None, choices=['auto', '0', '1'],
                    help='first frame number in the box files (auto: 0 if a box is on frame 0, 1 for MOT style files)')
 
   p = sub.add_parser('serve', help='start the annotator')
   data_args(p, False)
   p.add_argument('--project', help='project folder (default: ./annotete_projects/<videos name>)')
-  p.add_argument('--mode', default='auto', choices=['auto', 'detections', 'tracks'],
+  p.add_argument('--mode', default=None, choices=['auto', 'detections', 'tracks'],
                  help='detections: assign ids to boxes; tracks: correct the ids of a tracker output '
                       '(auto: tracks if ids repeat across frames)')
   p.add_argument('--classes', help='classes to annotate, e.g. "1,5" (default all)')
   p.add_argument('--class-names', help='e.g. "1=person,5=car"')
   p.add_argument('--min-conf', type=float, help='ignore boxes below this confidence')
-  p.add_argument('--step', type=int, default=10, help='keyframe step in frames')
-  p.add_argument('--max-gap', type=int, default=300, help='do not interpolate between keys further apart')
+  p.add_argument('--step', type=int, help='keyframe step in frames (default 10)')
+  p.add_argument('--max-gap', type=int, help='do not interpolate between keys further apart (default 300)')
   p.add_argument('--host', default='127.0.0.1', help='0.0.0.0 to allow other machines (no authentication!)')
   p.add_argument('--port', type=int, default=8765)
   p.add_argument('--no-browser', action='store_true')

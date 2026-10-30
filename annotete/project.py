@@ -134,14 +134,8 @@ class Project:
 
   @classmethod
   def create(cls, root, videos, boxes=None, **settings):
-    entries, warnings = scan(videos, boxes)
-    names = set()
-    for e in entries:  # unique item names
-      base, k = e['name'], 1
-      while e['name'] in names:
-        k += 1
-        e['name'] = f'{base}_{k}'
-      names.add(e['name'])
+    entries, warnings = _scan_items(videos, boxes)
+    for e in entries:
       e.update(range=None, status='todo', stats=None)
     s = dict(DEFAULT_SETTINGS)
     s.update({k: v for k, v in settings.items() if v is not None})
@@ -150,6 +144,38 @@ class Project:
     p = cls(root, config)
     p.save()
     return p, warnings
+
+  @classmethod
+  def open_or_create(cls, root, videos, boxes=None, **settings):
+    """The videos / box files given now are what the project uses, also when
+    the folder already holds a project: only its saved annotations (and
+    per-video range / status) carry over, matched by video name.
+    Settings that are None keep their saved value."""
+    if not cls.exists(root):
+      return cls.create(root, videos, boxes, **settings)
+    p = cls.open(root)
+    warnings = p.set_sources(videos, boxes)
+    p.settings.update({k: v for k, v in settings.items() if v is not None})
+    p.save()
+    return p, warnings
+
+  def set_sources(self, videos, boxes=None):
+    entries, warnings = _scan_items(videos, boxes)
+    old = {it['name']: it for it in self.items}
+    for e in entries:
+      o = old.get(e['name'], {})
+      e.update(range=o.get('range'), status=o.get('status', 'todo'), stats=o.get('stats'))
+    names = {e['name'] for e in entries}
+    gone = [n for n in old if n not in names]
+    if gone:
+      warnings.append(f'{len(gone)} video(s) of this project are not in the given folder ({", ".join(gone[:5])}'
+                      f'{" ..." if len(gone) > 5 else ""}); their annotations stay in {self.ann_dir}')
+    kept = [e['name'] for e in entries if os.path.exists(self.ann_path(e))]
+    if kept:
+      warnings.append(f'continuing the saved annotations of {len(kept)} video(s) in {self.root}')
+    self.config.update(videos=os.path.abspath(os.path.expanduser(videos)),
+                       boxes=os.path.abspath(os.path.expanduser(boxes)) if boxes else None, items=entries)
+    return warnings
 
   @classmethod
   def open(cls, root):
@@ -183,6 +209,19 @@ class Project:
 
   def ann_path(self, item):
     return os.path.join(self.ann_dir, item['name'] + '.json')
+
+
+def _scan_items(videos, boxes):
+  """scan() with unique item names (two videos called cam.mp4 / cam.avi)."""
+  entries, warnings = scan(videos, boxes)
+  names = set()
+  for e in entries:
+    base, k = e['name'], 1
+    while e['name'] in names:
+      k += 1
+      e['name'] = f'{base}_{k}'
+    names.add(e['name'])
+  return entries, warnings
 
 
 def atomic_json(path, data, backup_every=600):

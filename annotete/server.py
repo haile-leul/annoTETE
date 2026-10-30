@@ -240,11 +240,9 @@ class Handler(BaseHTTPRequestHandler):
   def r_create(self, q):
     b = self._body()
     root = os.path.abspath(os.path.expanduser(b['root']))
-    if Project.exists(root):
-      p = Project.open(root)
-      warnings = ['opened the existing project in this folder']
-    else:
-      p, warnings = Project.create(root, b['videos'], b.get('boxes') or None, **(b.get('settings') or {}))
+    scan(b['videos'], b.get('boxes') or None)  # bad paths fail here, before anything is closed
+    self.app.set_project(None)  # save + close the open videos before their project changes
+    p, warnings = Project.open_or_create(root, b['videos'], b.get('boxes') or None, **(b.get('settings') or {}))
     self.app.set_project(p)
     self._send(200, dict(state=self.app.state(), warnings=warnings))
 

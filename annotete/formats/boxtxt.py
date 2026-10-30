@@ -235,12 +235,13 @@ def load_boxes(path, layout='auto', frame_base=None, n_frames=None):
   if layout.frame_base == 'auto':
     layout.frame_base, layout.base_reason = resolve_frame_base(frame, layout.sep, n_frames)
   frame = [f - layout.frame_base for f in frame]
+  signature = f'{file_signature(path)}|base{layout.frame_base}|{sorted(layout.cols.items())}|{layout.box}'
   warnings = []
   if bad:
     warnings.append(f'{os.path.basename(path)}: skipped {bad} malformed line(s) (first at line {first_bad})')
   dets = Detections(frame, np.array(box, np.float64).reshape(-1, 4), conf, cls, quality, src_id, lines, layout,
                     ncols.most_common(1)[0][0] if ncols else layout.min_cols(), int_coords, path,
-                    file_signature(path), warnings)
+                    signature, warnings)
   if len(dets) and dets.frame.min() < 0:
     warnings.append(f'{os.path.basename(path)}: frames below the frame base {layout.frame_base} were found; '
                     'check the format (0- or 1-based frames)')

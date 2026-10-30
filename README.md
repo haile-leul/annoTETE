@@ -223,7 +223,12 @@ project.json              paths, settings, per video range and status
 annotations/<video>.json  keyframes + filled boxes, autosaved (atomic write, plus a .bak copy)
 ```
 
-Run the same command again (or `--project P`) to continue. Every edit is one undo
+Run the same command again (or `--project P`) to continue. The videos and box
+files are always the ones you give now (`--videos`/`--dets`, or the setup page),
+even when the project folder already exists. From an existing project only the
+saved annotations, ranges and statuses carry over, matched by video name, so a
+run with the wrong folders is fixed by simply running again with the right ones.
+`--project P` alone re-opens P with the paths it was last given. Every edit is one undo
 step (up to 300); a failing edit is rolled back as a whole. Annotations remember
 which detection each box came from and re-check those links if the box file changes.
 

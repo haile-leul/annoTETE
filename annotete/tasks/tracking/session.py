@@ -44,9 +44,13 @@ class TrackingSession:
     if mode == 'auto':
       mode = 'tracks' if self.dets.ids_look_like_tracks() else 'detections'
     self.mode = mode
+    data = None
     if os.path.exists(path):
       with open(path) as f:
         data = json.load(f)
+      if not data.get('tracks'):
+        data = None  # an empty annotation: start fresh from the current box file
+    if data is not None:
       self.warnings += self.ann.load_json(data)
       self.mode = data.get('mode', mode)
     elif mode == 'tracks':

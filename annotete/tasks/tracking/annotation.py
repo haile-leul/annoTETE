@@ -793,7 +793,10 @@ class TrackingAnnotation:
     """Restore saved tracks. Detection links that do not fit the current
     detection file (changed file) are dropped, the boxes are kept."""
     warnings = []
-    relink = data.get('det_signature') not in (None, self.dets.signature)
+    saved, cur = data.get('det_signature'), self.dets.signature or ''
+    if saved and '|' not in saved:  # saved before the signature included how the file was read
+      cur = cur.split('|')[0]
+    relink = saved not in (None, cur)
     if relink:
       warnings.append('the detection file changed since this annotation was saved; boxes are kept but '
                       'detection links were re-checked')
