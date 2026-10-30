@@ -1,8 +1,6 @@
 /* evaluATE (on top of app.css) */
 :root { --good: #4ccf7a; --bad: #ef5b5b; --warn: #f5a524; --nodet: #8a6fd8; }
 .evapp { display: grid; grid-template-rows: 44px 1fr; height: 100%; }
-.brand.switch { background: none; border: 0; font-size: 15px; color: var(--accent2); padding: 4px 6px; }
-.brand.switch:hover { background: #20262f; }
 .crumbs { display: flex; gap: 6px; align-items: center; color: var(--muted); min-width: 0; overflow: hidden; white-space: nowrap; }
 .crumbs a { color: var(--text); text-decoration: none; }
 .crumbs a:hover { color: var(--accent); }
