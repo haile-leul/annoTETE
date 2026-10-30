@@ -264,6 +264,62 @@ def test_save_load_roundtrip(scene):
   check_consistent(c)
 
 
+def test_annotation_adapts_to_a_new_detection_file(tmp_path):
+  """The detector is run again: boxes moved a little, classes renumbered,
+  other lines in between (all indices shift), one detection gone, one new."""
+  gt, lines = make_scene(120, 4, seed=3, miss=0.15)
+  d = load_boxes(write(tmp_path, lines))
+  a = TrackingAnnotation(d, 120, 640, 480, dict(classes=[5]))
+  a.new_tracks(0)
+  f = 0
+  for _ in range(30):
+    f = a.advance(f)['frame']
+    a.accept(f)
+    a.new_tracks(f)
+    if f >= 119:
+      break
+  data = a.to_json()
+  linked = {(t.id, g): t.box(g)[:4] for t in a.tracks.values() for g, _ in t.dets()}
+  assert len(linked) > 150
+  gone_t, gone_f = sorted(linked)[len(linked) // 2]  # this detection is not found by the new run
+  interp = next(((t.id, g) for t in a.tracks.values() for g, v in t.auto.items() if v[4] < 0), None)
+
+  rng = np.random.default_rng(0)
+  new, did = [], 900000
+  for f in range(120):
+    new.append(f'{f} {did} 600 5 20 20 30.0 2 0.1 -1 -9999 -9999 -9999 -9999')  # shifts every index
+    did += 1
+    for t in a.tracks.values():
+      if (t.id, f) in linked and (t.id, f) != (gone_t, gone_f) or interp == (t.id, f):
+        x, y, w, h = (linked.get((t.id, f)) or t.box(f)[:4]) + rng.normal(0, 1, 4)
+        cls = 10 if t.cls == 5 else 11
+        new.append(f'{f} {did} {x:.2f} {y:.2f} {w:.2f} {h:.2f} 80.0 {cls} 0.5 -1 -9999 -9999 -9999 -9999')
+        did += 1
+  d2 = load_boxes(write(tmp_path, new, 'd2.txt'))
+  b = TrackingAnnotation(d2, 120, 640, 480, dict(classes=[5]))
+  w = b.load_json(data)
+  check_consistent(b)
+  assert b.relinked and 'moved onto the new detections' in w[0]
+  assert set(b.tracks) == set(a.tracks)
+  for (tid, g), box in linked.items():  # every box sits on its new detection, nothing is left behind it
+    bx = b.tracks[tid].box(g)
+    if (tid, g) == (gone_t, gone_f):
+      assert bx[4] == -1 and np.allclose(bx[:4], box)
+    else:
+      assert bx[4] >= 0 and d2.frame[bx[4]] == g and np.allclose(bx[:4], d2.box[bx[4]])
+  if interp:
+    assert b.tracks[interp[0]].box(interp[1])[4] >= 0
+  free = [i for i in range(len(d2)) if b.owner[i] < 0]
+  assert all(d2.box[i][0] == 600 for i in free)  # only the unrelated new boxes are unassigned
+  assert {t.cls for t in b.tracks.values()} <= {10, 11}
+  assert all(t.cls == (10 if a.tracks[t.id].cls == 5 else 11) for t in b.tracks.values())
+  assert b.settings['classes'] == [5, 10] and all(b.track_visible(t) for t in b.tracks.values()
+                                                  if a.track_visible(a.tracks[t.id]))
+  # saved again it loads as is
+  c = TrackingAnnotation(d2, 120, 640, 480, b.settings)
+  assert c.load_json(b.to_json()) == [] and snapshot(c) == snapshot(b)
+
+
 def test_class_filter_and_conf(scene):
   _, d = scene
   a = TrackingAnnotation(d, 200, 640, 480, dict(classes=[5], min_conf=50))

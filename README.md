@@ -323,8 +323,16 @@ even when the project folder already exists. From an existing project only the
 saved annotations, ranges and statuses carry over, matched by video name, so a
 run with the wrong folders is fixed by simply running again with the right ones.
 `--project P` alone re-opens P with the paths it was last given. Every edit is one undo
-step (up to 300); a failing edit is rolled back as a whole. Annotations remember
-which detection each box came from and re-check those links if the box file changes.
+step (up to 300); a failing edit is rolled back as a whole.
+
+**New detections for annotated videos** (e.g. the detector was run again): just
+point `--dets` at the new files. When a video opens, its saved boxes are matched
+to the new detections frame by frame (IoU >= 0.5, keyframes first): each box
+moves onto its new detection, interpolated boxes pick up detections that now sit
+under them, and every track takes the class of its new detections (a class
+filter is widened so the tracks stay visible). A box whose object the new run no
+longer detects stays where it was as a hand-drawn box. A toast says what
+changed, and the previous annotation is kept in `annotations/backups/`.
 
 Working on a remote machine: run it there and tunnel the port,
 `ssh -L 8765:localhost:8765 gpu-box`, then open <http://localhost:8765>

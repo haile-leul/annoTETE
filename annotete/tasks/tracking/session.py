@@ -5,6 +5,7 @@ import json
 import os
 import shutil
 import threading
+import time
 
 import numpy as np
 
@@ -53,6 +54,16 @@ class TrackingSession:
     if data is not None:
       self.warnings += self.ann.load_json(data)
       self.mode = data.get('mode', mode)
+      if self.ann.relinked:  # adapted to a new box file: keep the old save, store the adapted one
+        backup = os.path.join(os.path.dirname(path), 'backups',
+                              f'{item["name"]}.{time.strftime("%Y%m%d-%H%M%S")}.json')
+        os.makedirs(os.path.dirname(backup), exist_ok=True)
+        shutil.copy2(path, backup)
+        self.warnings.append(f'the previous annotation is backed up in {backup}')
+        self.ann.dirty = True
+        if self.ann.filter_added:
+          s['classes'] = list(self.ann.settings['classes'])
+          project.save()
     elif mode == 'tracks':
       self.ann.import_tracks()
       self.ann.dirty = True
@@ -75,7 +86,8 @@ class TrackingSession:
                 mode=self.mode, classes=d.classes(), conf_range=[lo, hi], n_dets=len(d), range=self.range,
                 full_range=self.item.get('range') is None, status=self.item.get('status', 'todo'),
                 warnings=self.warnings, rev=self.ann.rev, next_id=self.ann.next_id, stats=self.ann.stats(*self.range),
-                layout=d.layout.to_dict(), undo=len(self.ann._undo), redo=len(self.ann._redo))
+                layout=d.layout.to_dict(), undo=len(self.ann._undo), redo=len(self.ann._redo),
+                settings=dict(self.project.settings))
 
   # --------------------------------------------------------------- commands
   def command(self, op, a):

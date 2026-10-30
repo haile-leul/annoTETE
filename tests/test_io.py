@@ -341,3 +341,34 @@ def test_unread_request_body_does_not_break_the_next_request(dataset, tmp_path):
   finally:
     srv.shutdown()
     app.shutdown()
+
+
+def test_reopening_with_new_detections_keeps_and_adapts_the_annotation(dataset, tmp_path):
+  import shutil
+  dets = tmp_path / 'dets'
+  shutil.copytree(dataset / 'dets', dets)
+  root = str(tmp_path / 'proj')
+  p, _ = Project.open_or_create(root, str(dataset / 'videos'), str(dets), classes=[5])
+  s = TrackingSession(p, p.items[0], frames=False)
+  s.command('new_tracks', dict(frame=0))
+  s.command('advance', dict(frame=0))
+  s.save()
+  before = s.tracks()
+  # the detector is run again: same objects, class 5 is now 8, lines in another order
+  path = dets / 'cam0.txt'
+  lines = [l.split() for l in path.read_text().splitlines() if l]
+  for t in lines:
+    t[7] = '8' if t[7] == '5' else t[7]
+  lines.reverse()
+  path.write_text('\n'.join(' '.join(t) for t in sorted(lines, key=lambda t: int(t[0]))) + '\n')
+  p2, _ = Project.open_or_create(root, str(dataset / 'videos'), str(dets))
+  s2 = TrackingSession(p2, p2.items[0], frames=False)
+  assert any('moved onto the new detections' in w for w in s2.warnings)
+  assert [t['id'] for t in s2.tracks()] == [t['id'] for t in before]
+  assert all(t['cls'] == 8 for t in s2.tracks())
+  assert p2.settings['classes'] == [5, 8] and s2.meta()['settings']['classes'] == [5, 8]
+  backups = os.listdir(os.path.join(os.path.dirname(p2.ann_path(p2.items[0])), 'backups'))
+  assert len(backups) == 1 and backups[0].startswith('cam0.')
+  assert s2.save()  # the adapted annotation is written with the new file's signature
+  s3 = TrackingSession(Project.open(root), p2.items[0], frames=False)
+  assert not any('changed' in w for w in s3.warnings) and s3.tracks() == s2.tracks()

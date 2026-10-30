@@ -73,6 +73,7 @@ class App {
       toast(`Cannot open ${name}: ${e.message}`, 'err', 6000);
       return;
     }
+    if (meta.settings) this.project.settings = meta.settings; // opening can widen the class filter (new box file)
     store.set(`item:${this.project.root}`, name);
     $('#itemSelect').value = name;
     $('#itemStatus').value = meta.status || 'todo';

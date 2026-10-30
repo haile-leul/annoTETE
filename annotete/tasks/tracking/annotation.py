@@ -10,7 +10,7 @@ from contextlib import contextmanager
 
 import numpy as np
 
-from ...geometry import iou, lerp
+from ...geometry import greedy_match, iou, iou_matrix, lerp
 from . import propose, review
 from .fill import fill_segment
 from .model import (AUTO_INTERP, FORCE_FILL, IMPORTED, MANUAL, OUTSIDE, Track)
@@ -22,6 +22,7 @@ DEFAULT_SETTINGS = dict(
   min_conf=None,  # ignore detections below this confidence (None = keep all)
 )
 UNDO_LIMIT = 300
+RELINK_IOU = 0.5  # a saved box and a detection of a changed box file are the same object
 
 
 class EditError(ValueError):
@@ -43,6 +44,8 @@ class TrackingAnnotation:
     self._undo, self._redo = [], []
     self._txn = None
     self._pending = {}
+    self.relinked = False
+    self.filter_added = []
     self.configure(**(settings or {}))
 
   # ---------------------------------------------------------------- settings
@@ -790,42 +793,119 @@ class TrackingAnnotation:
                 tracks=[t.to_json() for t in sorted(self.tracks.values(), key=lambda t: t.id)])
 
   def load_json(self, data):
-    """Restore saved tracks. Detection links that do not fit the current
-    detection file (changed file) are dropped, the boxes are kept."""
+    """Restore saved tracks. If the detection file changed since the save, the
+    boxes are matched again to the new detections (see _relink); otherwise a
+    link that does not fit the file is dropped and its box kept."""
     warnings = []
     saved, cur = data.get('det_signature'), self.dets.signature or ''
     if saved and '|' not in saved:  # saved before the signature included how the file was read
       cur = cur.split('|')[0]
-    relink = saved not in (None, cur)
-    if relink:
-      warnings.append('the detection file changed since this annotation was saved; boxes are kept but '
-                      'detection links were re-checked')
+    self.relinked = saved not in (None, cur)
     self.tracks.clear()
     self.owner[:] = -1
     self.owner_key[:] = False
-    bad = 0
-    for td in data.get('tracks', []):
-      t = Track.from_json(td)
-      for store, is_key in ((t.keys, True), (t.auto, False)):
-        for f, v in list(store.items()):
-          det = v[4]
-          if det < 0:
-            continue
-          ok = det < len(self.dets) and self.dets.frame[det] == f and self.owner[det] < 0
-          if ok and relink:
-            ok = iou(self.dets.box[det], v[:4]) > 0.99
-          if ok:
-            self.owner[det] = t.id
-            self.owner_key[det] = is_key
-          else:
-            bad += 1
-            store[f] = v[:4] + (-1,) + ((v[5] | MANUAL,) if is_key else ())
+    tracks = [Track.from_json(td) for td in data.get('tracks', [])]
+    if self.relinked:
+      warnings += self._relink(tracks)
+    else:
+      bad = 0
+      for t in tracks:
+        for store, is_key in ((t.keys, True), (t.auto, False)):
+          for f, v in list(store.items()):
+            det = v[4]
+            if det < 0:
+              continue
+            if det < len(self.dets) and self.dets.frame[det] == f and self.owner[det] < 0:
+              self.owner[det] = t.id
+              self.owner_key[det] = is_key
+            else:
+              bad += 1
+              store[f] = v[:4] + (-1,) + ((v[5] | MANUAL,) if is_key else ())
+      if bad:
+        warnings.append(f'{bad} box(es) lost their detection link')
+    for t in tracks:
       t.changed()
       self.tracks[t.id] = t
     self.next_id = max([int(data.get('next_id', 1))] + [t + 1 for t in self.tracks])
-    if bad:
-      warnings.append(f'{bad} box(es) lost their detection link')
     self._undo.clear()
     self._redo.clear()
     self.rev += 1
     return warnings
+
+  def _relink(self, tracks):
+    """The box file changed (e.g. the detector was run again): detection
+    indices of the save mean nothing any more. On each frame the saved boxes
+    are matched one to one (IoU) to the new detections, keys first, then
+    automatic boxes; a matched box moves onto its new detection, an unmatched
+    one stays where it was without a link. Interpolated boxes pick up a new
+    detection that now sits under them. Each track then takes the class of its
+    new detections, and a class filter is widened to keep the tracks shown."""
+    d = self.dets
+    levels = ({}, {}, {})  # frame -> [(track, frame)]: linked keys, linked autos, interpolated autos
+    for t in tracks:
+      for f, k in t.keys.items():
+        if k[4] >= 0:
+          levels[0].setdefault(f, []).append(t)
+      for f, a in t.auto.items():
+        if f not in t.keys:
+          levels[1 if a[4] >= 0 else 2].setdefault(f, []).append(t)
+    old_cls = {t.id: t.cls for t in tracks}
+    moved = lost = gained = 0
+    for level, by_frame in enumerate(levels):
+      if level == 2:  # classes (and so the filter) are known now; filling only snaps to allowed detections
+        self._relink_classes(tracks)
+      for f, ts in by_frame.items():
+        a, b = d.frame_slice(f)
+        free = [i for i in range(a, b) if self.owner[i] < 0 and (level < 2 or self.allowed[i])]
+        store = (lambda t: t.keys) if level == 0 else (lambda t: t.auto)
+        boxes = [store(t)[f][:4] for t in ts]
+        pairs = greedy_match(iou_matrix(boxes, d.box[free]), RELINK_IOU) if free else []
+        hit = set()
+        for r, c in pairs:
+          t, det = ts[r], free[c]
+          box = tuple(float(v) for v in d.box[det])
+          store(t)[f] = box + ((det, t.keys[f][5]) if level == 0 else (det,))
+          self.owner[det] = t.id
+          self.owner_key[det] = level == 0
+          hit.add(r)
+        for r, t in enumerate(ts):
+          if r in hit:
+            moved += level < 2
+            gained += level == 2
+          elif level == 0:
+            k = t.keys[f]
+            t.keys[f] = k[:4] + (-1, k[5] | MANUAL)
+            lost += 1
+          elif level == 1:
+            t.auto[f] = t.auto[f][:4] + (-1,)
+            lost += 1
+    msg = (f'the detection file changed since this annotation was saved: {moved} box(es) moved onto the '
+           f'new detections')
+    if gained:
+      msg += f', {gained} interpolated box(es) now sit on a detection'
+    if lost:
+      msg += f', {lost} box(es) have no matching detection any more and stay where they were'
+    out = [msg]
+    changes = {}
+    for t in tracks:
+      if t.cls != old_cls[t.id]:
+        k = (old_cls[t.id], t.cls)
+        changes[k] = changes.get(k, 0) + 1
+    if changes:
+      out.append('track classes updated from the new detections: ' +
+                 ', '.join(f'{n} track(s) {a} -> {b}' for (a, b), n in sorted(changes.items())))
+    if self.filter_added:
+      out.append(f'class filter now also includes {", ".join(map(str, self.filter_added))}')
+    return out
+
+  def _relink_classes(self, tracks):
+    """Each track takes the most common class of its (new) detections."""
+    d = self.dets
+    for t in tracks:
+      cls = [int(d.cls[det]) for _, det in t.dets() if d.cls[det] >= 0]
+      if cls:
+        t.cls = int(np.bincount(cls).argmax())
+    cl = self.settings['classes']
+    self.filter_added = sorted({t.cls for t in tracks if t.cls >= 0} - set(cl)) if cl else []
+    if self.filter_added:
+      self.configure(classes=cl + self.filter_added)
