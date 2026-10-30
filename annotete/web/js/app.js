@@ -92,7 +92,7 @@ class App {
     T.meta.stats = meta.stats;
     const it = this.project.items.find((i) => i.name === meta.name);
     if (it) { it.stats = meta.stats; }
-    if ($('#tab-data').classList.contains('on')) panels.renderData(this.task);
+    panels.renderStats(this.task);
     this.renderItems();
   }
 
@@ -102,7 +102,14 @@ class App {
     el.textContent = s === 'busy' ? 'saving…' : s === 'err' ? 'error' : 'saved';
   }
 
-  async saveSettings(patch) {
+  // Settings changes run one after another, so quick successive changes (a
+  // slider being dragged) can never land out of order.
+  saveSettings(patch) {
+    this._settingsQ = (this._settingsQ || Promise.resolve()).then(() => this._saveSettings(patch));
+    return this._settingsQ;
+  }
+
+  async _saveSettings(patch) {
     try {
       this.state = await post('/api/settings', patch);
     } catch (e) { toast(e.message, 'err'); return; }

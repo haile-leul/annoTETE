@@ -185,16 +185,13 @@ export function nextIssue(T, dir) {
 }
 
 // -------------------------------------------------------------------- data
-export function renderData(T) {
-  const tab = $('#tab-data');
-  tab.innerHTML = '';
+// The Video card alone: refreshed after edits without rebuilding the controls
+// below it (a rebuild would drop a slider out from under the mouse).
+function videoCard(T) {
   const m = T.meta;
-  const s = T.app.settings;
   const st = m.stats || {};
   const pct = st.progress != null ? Math.round(st.progress * 100) : null;
-
-  // video
-  tab.append(h('div', { class: 'card' },
+  return h('div', { class: 'card', id: 'videoCard' },
     h('h4', {}, 'Video'),
     h('div', { class: 'stat' }, h('span', {}, 'frames'), h('b', {}, `${m.n_frames} @ ${m.fps.toFixed(2)} fps`)),
     h('div', { class: 'stat' }, h('span', {}, 'size'), h('b', {}, `${m.width}×${m.height}`)),
@@ -206,7 +203,20 @@ export function renderData(T) {
     h('div', { class: 'stat' }, h('span', {}, 'detections with an id'), h('b', {}, pct != null ? `${st.assigned} / ${st.dets} (${pct}%)` : '-')),
     pct != null ? h('div', { class: 'progress' }, h('i', { style: { width: `${pct}%` } })) : '',
     (m.warnings || []).map((w) => h('div', { class: 'help', style: { color: '#f5a524' } }, '⚠ ', w)),
-  ));
+  );
+}
+
+export function renderStats(T) {
+  const old = document.getElementById('videoCard');
+  if (old) old.replaceWith(videoCard(T));
+}
+
+export function renderData(T) {
+  const tab = $('#tab-data');
+  tab.innerHTML = '';
+  const m = T.meta;
+  const s = T.app.settings;
+  tab.append(videoCard(T));
 
   // classes
   const classes = Object.entries(m.classes || {}).map(([k, n]) => [Number(k), n]).sort((a, b) => a[0] - b[0]);
@@ -231,11 +241,12 @@ export function renderData(T) {
   const [clo, chi] = m.conf_range || [0, 1];
   const span = chi - clo || 1;
   const conf = s.min_conf ?? clo;
+  // applied live while dragging (rate limited); the last value always wins
+  const liveConf = debounce((v) => T.app.saveSettings({ min_conf: v }), 120);
   const confVal = h('input', { type: 'number', value: +conf.toFixed(3), step: span > 5 ? 1 : 0.01, onkeydown: (e) => e.stopPropagation(),
-    onchange: (e) => T.app.saveSettings({ min_conf: Number(e.target.value) }) });
+    onchange: (e) => { confSl.value = e.target.value; T.app.saveSettings({ min_conf: Number(e.target.value) }); } });
   const confSl = h('input', { type: 'range', min: clo, max: chi, step: span / 200, value: conf,
-    oninput: (e) => { confVal.value = (+e.target.value).toFixed(span > 5 ? 1 : 3); },
-    onchange: (e) => T.app.saveSettings({ min_conf: Number(e.target.value) }) });
+    oninput: (e) => { const v = +e.target.value; confVal.value = v.toFixed(span > 5 ? 1 : 3); liveConf(+confVal.value); } });
   const num = (key, val, min, title) => h('input', { type: 'number', value: val, min, title, onkeydown: (e) => e.stopPropagation(),
     onchange: (e) => T.app.saveSettings({ [key]: Number(e.target.value) }) });
   tab.append(h('div', { class: 'card' },
