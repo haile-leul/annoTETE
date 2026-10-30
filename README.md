@@ -333,6 +333,9 @@ under them, and every track takes the class of its new detections (a class
 filter is widened so the tracks stay visible). A box whose object the new run no
 longer detects stays where it was as a hand-drawn box. A toast says what
 changed, and the previous annotation is kept in `annotations/backups/`.
+If a video was already saved with its boxes unlinked (white boxes behind your
+annotation), *Data → Re-match to detections* does the same matching on demand,
+hand-drawn keys included, as one undo step.
 
 Working on a remote machine: run it there and tunnel the port,
 `ssh -L 8765:localhost:8765 gpu-box`, then open <http://localhost:8765>

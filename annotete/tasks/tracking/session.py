@@ -110,6 +110,7 @@ class TrackingSession:
       'accept': lambda: A.accept(f(), a.get('tracks'), bool(a.get('only_sure'))),
       'advance': lambda: A.advance(f(), self.range[1], a.get('step'), int(a.get('max_steps', 1000))),
       'bootstrap': lambda: A.bootstrap(*self.range),
+      'rematch': self._rematch,
       'undo': A.undo,
       'redo': A.redo,
     }
@@ -122,6 +123,13 @@ class TrackingSession:
       changed = A.rev != rev0
       return dict(result=result, rev=A.rev, changed=changed, dirty=A.last_dirty if changed else None,
                   next_id=A.next_id, undo=len(A._undo), redo=len(A._redo))
+
+  def _rematch(self):
+    out = self.ann.rematch()
+    if self.ann.filter_added:
+      self.project.settings['classes'] = list(self.ann.settings['classes'])
+      self.project.save()
+    return out
 
   def configure(self, settings):
     with self.lock:

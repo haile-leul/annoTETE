@@ -395,6 +395,13 @@ export class TrackingTask {
     this.setActive(n);
   }
 
+  async rematch() {
+    const lines = await this.cmd('rematch');
+    for (const l of lines) toast(l, 'ok', 6000);
+    const meta = await get(`${this.base}/meta`); // the class filter may have been widened
+    if (meta.settings) this.app.project.settings = meta.settings;
+  }
+
   async fillGaps() {
     if (!this.needActive()) return;
     const n = await this.cmd('fill_gaps', { track: this.active });

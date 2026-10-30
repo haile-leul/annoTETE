@@ -1,3 +1,4 @@
+import json
 import os
 import random
 import sys
@@ -13,7 +14,7 @@ from annotete.formats import load_boxes  # noqa: E402
 from annotete.geometry import iou, iou_many  # noqa: E402
 from annotete.tasks.tracking.annotation import EditError, TrackingAnnotation  # noqa: E402
 from annotete.tasks.tracking.fill import fill_segment  # noqa: E402
-from annotete.tasks.tracking.model import OUTSIDE  # noqa: E402
+from annotete.tasks.tracking.model import MANUAL, OUTSIDE  # noqa: E402
 
 
 def write(tmp_path, lines, name='d.txt'):
@@ -318,6 +319,23 @@ def test_annotation_adapts_to_a_new_detection_file(tmp_path):
   # saved again it loads as is
   c = TrackingAnnotation(d2, 120, 640, 480, b.settings)
   assert c.load_json(b.to_json()) == [] and snapshot(c) == snapshot(b)
+
+  # an annotation saved by the old version after it dropped every link: re-match repairs it
+  broken = json.loads(json.dumps(data))
+  broken['det_signature'] = d2.signature
+  for td in broken['tracks']:
+    td['keys'] = [k[:5] + [-1, k[6] | MANUAL] if k[5] >= 0 else k for k in td['keys']]
+    td['auto'] = [v[:5] + [-1] for v in td['auto']]
+  e = TrackingAnnotation(d2, 120, 640, 480, dict(classes=[5]))
+  assert e.load_json(broken) == [] and not e.relinked and e.owner.max() < 0
+  hand = e.tracks[1].keys[0]  # looks hand drawn now: snaps back onto its detection too
+  n = [int(w) for w in e.rematch()[0].replace(',', ' ').split() if w.isdigit()]
+  assert sum(n) == len(linked)  # every box that was on a detection (+ the interpolated one) is back on one
+  check_consistent(e)
+  assert [i for i in range(len(d2)) if e.owner[i] < 0] == free
+  assert {t.id: t.cls for t in e.tracks.values()} == {t.id: t.cls for t in b.tracks.values()}
+  assert e.settings['classes'] == [5, 10]
+  assert e.undo() == 're-match' and e.tracks[1].keys[0] == hand and e.owner.max() < 0
 
 
 def test_class_filter_and_conf(scene):

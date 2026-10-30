@@ -806,7 +806,7 @@ class TrackingAnnotation:
     self.owner_key[:] = False
     tracks = [Track.from_json(td) for td in data.get('tracks', [])]
     if self.relinked:
-      warnings += self._relink(tracks)
+      warnings += self._relink(tracks, prefix='the detection file changed since this annotation was saved: ')
     else:
       bad = 0
       for t in tracks:
@@ -832,19 +832,20 @@ class TrackingAnnotation:
     self.rev += 1
     return warnings
 
-  def _relink(self, tracks):
+  def _relink(self, tracks, manual=False, prefix=''):
     """The box file changed (e.g. the detector was run again): detection
     indices of the save mean nothing any more. On each frame the saved boxes
     are matched one to one (IoU) to the new detections, keys first, then
     automatic boxes; a matched box moves onto its new detection, an unmatched
     one stays where it was without a link. Interpolated boxes pick up a new
     detection that now sits under them. Each track then takes the class of its
-    new detections, and a class filter is widened to keep the tracks shown."""
+    new detections, and a class filter is widened to keep the tracks shown.
+    `manual`: hand drawn keys are matched too (see rematch)."""
     d = self.dets
     levels = ({}, {}, {})  # frame -> [(track, frame)]: linked keys, linked autos, interpolated autos
     for t in tracks:
       for f, k in t.keys.items():
-        if k[4] >= 0:
+        if k[4] >= 0 or manual and not k[5] & OUTSIDE:
           levels[0].setdefault(f, []).append(t)
       for f, a in t.auto.items():
         if f not in t.keys:
@@ -879,8 +880,7 @@ class TrackingAnnotation:
           elif level == 1:
             t.auto[f] = t.auto[f][:4] + (-1,)
             lost += 1
-    msg = (f'the detection file changed since this annotation was saved: {moved} box(es) moved onto the '
-           f'new detections')
+    msg = f'{prefix}{moved} box(es) moved onto the new detections'
     if gained:
       msg += f', {gained} interpolated box(es) now sit on a detection'
     if lost:
@@ -896,6 +896,21 @@ class TrackingAnnotation:
                  ', '.join(f'{n} track(s) {a} -> {b}' for (a, b), n in sorted(changes.items())))
     if self.filter_added:
       out.append(f'class filter now also includes {", ".join(map(str, self.filter_added))}')
+    return out
+
+  def rematch(self):
+    """Match every box of every track again to the detections of its frame,
+    hand drawn keys included, as on opening a changed box file. Repairs an
+    annotation whose detection links were lost. Returns the summary lines."""
+    with self._edit('re-match'):
+      tracks = list(self.tracks.values())
+      for t in tracks:
+        self._touch(t.id)
+        for _, det in t.dets():
+          self._release(det, t.id)
+      out = self._relink(tracks, manual=True)
+      for t in tracks:
+        t.changed()
     return out
 
   def _relink_classes(self, tracks):

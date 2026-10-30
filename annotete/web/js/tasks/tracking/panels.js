@@ -264,6 +264,9 @@ export function renderData(T) {
     h('div', { class: 'row' },
       h('button', { onclick: async () => { const ids = await T.cmd('bootstrap'); toast(`${ids.length} tracklets created`, 'ok'); } }, 'Build tracklets'),
       h('button', { onclick: async () => { const n = await T.cmd('fill_gaps', {}); toast(`${n} gaps filled`); }, title: 'interpolate every gap of every track' }, 'Fill all gaps')),
+    h('div', { class: 'help' }, h('p', {}, 'Boxes not sitting on their detections (white boxes behind them, e.g. after re-running the detector)? Re-match puts every box of this video back onto the detection under it and updates the track classes. One undo step.')),
+    h('div', { class: 'row' },
+      h('button', { onclick: () => T.rematch(), title: 'match every box again to the detections of its frame' }, 'Re-match to detections')),
   ));
 
   // display
