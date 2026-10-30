@@ -70,8 +70,17 @@ export class TrackingTask {
     this.updateChips();
   }
 
+  // Called when another video is opened: everything async that is still in
+  // flight for this one must not touch the shared canvas / panels any more.
   destroy() {
+    if (this.dead) return;
+    this.dead = true;
     this.playing = false;
+    this.token++;
+    clearTimeout(this._hiresT);
+    this.frames.queue = [];
+    this.viewer.destroy();
+    this.timeline.destroy();
     store.set(`frame:${this.name}`, this.frame);
   }
 
@@ -79,6 +88,7 @@ export class TrackingTask {
   get range() { return this.meta.range; }
 
   go(f, force = false) {
+    if (this.dead) return;
     f = clamp(Math.round(f), 0, this.meta.n_frames - 1);
     if (f === this.frame && !force && this.shownFrame === f) return;
     const dir = f >= this.frame ? 1 : -1;
@@ -118,12 +128,13 @@ export class TrackingTask {
     if (this.viewer.density < 0.9 * this.meta.width / this.frames.previewW && this.frames.previewW < this.meta.width) {
       // zoomed in beyond the preview resolution: fetch the native frame when idle
       this._hiresT = setTimeout(() => this.frames.load(f, this.meta.width).then((im) => {
-        if (this.frame === f) { this.viewer.setImage(im); }
+        if (this.frame === f && !this.dead) { this.viewer.setImage(im); }
       }).catch(() => {}), 180);
     }
   }
 
   _show(f, img, boxes) {
+    if (this.dead) return;
     $('#loading').classList.add('hidden');
     this.shownFrame = f;
     this.cur = boxes;
@@ -139,7 +150,7 @@ export class TrackingTask {
   async reloadFrame() {
     const f = this.frame;
     const b = await this.boxes.get(f);
-    if (f === this.frame) { this.cur = b; this.viewer.render(); this.updateHud(); panels.markHere(this); }
+    if (f === this.frame && !this.dead) { this.cur = b; this.viewer.render(); this.updateHud(); panels.markHere(this); }
   }
 
   async _refreshProps() {
@@ -147,7 +158,7 @@ export class TrackingTask {
     const f = this.frame;
     try {
       const r = await get(`${this.base}/proposals?f=${f}`);
-      if (f !== this.frame) return;
+      if (f !== this.frame || this.dead) return;
       this.props = r;
       this.viewer.render();
       this.updateHud();
@@ -214,7 +225,7 @@ export class TrackingTask {
     try {
       r = await get(`${this.base}/step?f=${f}&step=${this.step}`);
     } catch (e) { this.go(full); return; }
-    if (this.frame !== f) return; // the user moved meanwhile
+    if (this.frame !== f || this.dead) return; // the user moved (or left this video) meanwhile
     this.newDets = new Set(r.new);
     this.newFrame = r.frame;
     this.go(r.frame);
@@ -259,7 +270,7 @@ export class TrackingTask {
     if (tid == null || !this.trackById.has(tid)) { this.activeDetail = null; this.timeline.set({ active: tid, keys: [] }); return; }
     try {
       const d = await get(`${this.base}/track/${tid}`);
-      if (tid !== this.active) return;
+      if (tid !== this.active || this.dead) return;
       this.activeDetail = d;
       this.timeline.set({ active: tid, keys: d.keys });
       panels.renderActive(this);
@@ -268,6 +279,7 @@ export class TrackingTask {
 
   async _refreshTracks() {
     const r = await get(`${this.base}/tracks`);
+    if (this.dead) return;
     this.tracks = r.tracks;
     this.trackById = new Map(r.tracks.map((t) => [t.id, t]));
     this.timeline.set({ tracks: r.tracks });
@@ -279,6 +291,7 @@ export class TrackingTask {
   async _refreshCoverage() {
     try {
       const c = await get(`${this.base}/coverage?bins=1500`);
+      if (this.dead) return;
       this.timeline.set({ coverage: c });
     } catch (e) { /* ignore */ }
   }

@@ -1,5 +1,6 @@
 """One opened item of a tracking project: frames + detections + annotation,
 plus the command / query / export entry points used by the server and CLI."""
+import hashlib
 import json
 import os
 import shutil
@@ -64,7 +65,8 @@ class TrackingSession:
   def meta(self):
     d = self.dets
     lo, hi = d.conf_range()
-    return dict(name=self.item['name'], media=self.item['media'], boxes=self.item.get('boxes'), kind=self.source.kind,
+    return dict(name=self.item['name'], media=self.item['media'], media_key=media_key(self.item['media']),
+                boxes=self.item.get('boxes'), kind=self.source.kind,
                 n_frames=self.ann.n_frames, fps=self.source.fps, width=self.source.width, height=self.source.height,
                 mode=self.mode, classes=d.classes(), conf_range=[lo, hi], n_dets=len(d), range=self.range,
                 full_range=self.item.get('range') is None, status=self.item.get('status', 'todo'),
@@ -216,6 +218,16 @@ class TrackingSession:
     n_interp = sum(1 for r in rows if r[4] == AUTO_INTERP)
     log(f'{name}: {len(rows)} boxes ({n_interp} interpolated) in {len({r[1] for r in rows})} tracks')
     return warnings
+
+
+def media_key(path):
+  """Short id of a video file version (path, size, mtime) for browser caching."""
+  try:
+    st = os.stat(path)
+    raw = f'{os.path.abspath(path)}|{st.st_size}|{st.st_mtime_ns}'
+  except OSError:
+    raw = path
+  return hashlib.sha1(raw.encode()).hexdigest()[:10]
 
 
 def sanity_warnings(dets, source):

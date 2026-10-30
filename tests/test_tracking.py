@@ -321,3 +321,22 @@ def test_advance_stops_at_first_appearance(tmp_path):
   r = a.advance(0)
   assert r['frame'] == 27 and r['reason'] == 'new object'
   assert a.tracks[1].end() == 27  # the existing track was carried to the stop frame
+
+
+def test_drawn_box_bridges_missed_detections(tmp_path):
+  # a face moving right; the detector misses frames 6..14
+  lines = [f'{f} 0 {100 + 3 * f} 100 40 50 90 1 0.9' for f in range(20) if not 6 <= f <= 14]
+  d = load_boxes(write(tmp_path, lines))
+  a = TrackingAnnotation(d, 20, 640, 480)
+  tid = a.assign(0, int(d.frame_slice(0)[0]), None)
+  a.assign(5, int(d.frame_slice(5)[0]), tid)          # last detection you annotated
+  a.set_box(12, [100 + 3 * 12, 100, 40, 50], tid)       # box you drew 7 frames later
+  t = a.tracks[tid]
+  assert t.runs() == [[0, 12]]
+  for f in range(6, 12):                                # interpolated in between
+    b = t.box(f)
+    assert b[4] == -1 and abs(b[0] - (100 + 3 * f)) < 1e-6
+  # and the track continues from the drawn box onto the detections afterwards
+  a.accept(15)
+  assert t.end() == 15 and t.box(15)[4] >= 0 and t.box(14)[4] == -1
+  check_consistent(a)

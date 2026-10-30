@@ -28,7 +28,7 @@ export class FrameLoader {
     const k = this.key(f, w);
     if (this.cache.has(k)) return Promise.resolve(this.cached(f, w));
     if (this.inflight.has(k)) return this.inflight.get(k);
-    const qs = `w=${w === this.meta.width ? 0 : w}${hint.length ? `&next=${hint.join(',')}` : ''}`;
+    const qs = `w=${w === this.meta.width ? 0 : w}&v=${this.meta.media_key || ''}${hint.length ? `&next=${hint.join(',')}` : ''}`;
     const p = fetch(`${this.base}/frame/${f}?${qs}`)
       .then((r) => { if (!r.ok) throw new Error(`frame ${f}: ${r.status}`); return r.blob(); })
       .then((b) => createImageBitmap(b))

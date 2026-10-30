@@ -61,11 +61,14 @@ class App {
   async openItem(name) {
     if (this.task) this.task.destroy();
     this.task = null;
+    const tok = (this._openTok = (this._openTok || 0) + 1);
     $('#loading').classList.remove('hidden');
     let meta;
     try {
       meta = await get(`${item(name)}/meta`);
+      if (tok !== this._openTok) return; // another video was picked meanwhile
     } catch (e) {
+      if (tok !== this._openTok) return;
       $('#loading').classList.add('hidden');
       toast(`Cannot open ${name}: ${e.message}`, 'err', 6000);
       return;
@@ -83,8 +86,10 @@ class App {
 
   async _refreshStats() {
     if (!this.task) return;
-    const meta = await get(`${this.task.base}/meta`);
-    this.task.meta.stats = meta.stats;
+    const T = this.task;
+    const meta = await get(`${T.base}/meta`);
+    if (T !== this.task) return;
+    T.meta.stats = meta.stats;
     const it = this.project.items.find((i) => i.name === meta.name);
     if (it) { it.stats = meta.stats; }
     if ($('#tab-data').classList.contains('on')) panels.renderData(this.task);

@@ -10,8 +10,19 @@ export class Timeline {
     this.d = { n: 1, range: [0, 0], frame: 0, step: 10, tracks: [], coverage: null, active: null, keys: [], fps: 25 };
     this.t0 = 0; this.t1 = 1;
     this._raf = null;
+    this.dead = false;
+    this._ac = new AbortController();
     this._bind();
-    new ResizeObserver(() => this.render()).observe(wrap.parentElement);
+    this._ro = new ResizeObserver(() => this.render());
+    this._ro.observe(wrap.parentElement);
+  }
+
+  destroy() {
+    this.dead = true;
+    this._ac.abort();
+    this._ro.disconnect();
+    if (this._raf) cancelAnimationFrame(this._raf);
+    this._raf = null;
   }
 
   set(patch, refit = false) {
@@ -40,7 +51,7 @@ export class Timeline {
   }
 
   render() {
-    if (this._raf) return;
+    if (this._raf || this.dead) return;
     this._raf = requestAnimationFrame(() => { this._raf = null; this._drawRuler(); this._drawGantt(); });
   }
 
@@ -166,6 +177,7 @@ export class Timeline {
       const r = c.getBoundingClientRect();
       return clamp(this.f(ev.clientX - r.left, r.width), 0, this.d.n - 1);
     };
+    const sig = { signal: this._ac.signal };
     this.r.addEventListener('mousedown', (ev) => {
       ev.preventDefault();
       this.h.seek(seekAt(ev, this.r));
@@ -173,7 +185,7 @@ export class Timeline {
       const up = () => { window.removeEventListener('mousemove', mv); window.removeEventListener('mouseup', up); };
       window.addEventListener('mousemove', mv);
       window.addEventListener('mouseup', up);
-    });
+    }, sig);
     const zoom = (ev, c) => {
       ev.preventDefault();
       const r = c.getBoundingClientRect();
@@ -192,19 +204,19 @@ export class Timeline {
       }
       this.render();
     };
-    this.r.addEventListener('wheel', (ev) => zoom(ev, this.r), { passive: false });
-    this.g.addEventListener('wheel', (ev) => { if (ev.ctrlKey || ev.altKey) zoom(ev, this.g); }, { passive: false });
+    this.r.addEventListener('wheel', (ev) => zoom(ev, this.r), { passive: false, signal: this._ac.signal });
+    this.g.addEventListener('wheel', (ev) => { if (ev.ctrlKey || ev.altKey) zoom(ev, this.g); }, { passive: false, signal: this._ac.signal });
     this.g.addEventListener('mousedown', (ev) => {
       const r = this.g.getBoundingClientRect();
       const t = this.rowAt(ev.clientY - r.top);
       const f = seekAt(ev, this.g);
       if (t) this.h.selectTrack(t.id, f); else this.h.seek(f);
-    });
+    }, sig);
     this.g.addEventListener('mousemove', (ev) => {
       const r = this.g.getBoundingClientRect();
       const t = this.rowAt(ev.clientY - r.top);
       const f = seekAt(ev, this.g);
       this.g.title = t ? `#${t.id}  frames ${t.runs[0][0]}-${t.runs[t.runs.length - 1][1]}  (${t.n} boxes)  · frame ${f}` : `frame ${f}`;
-    });
+    }, sig);
   }
 }

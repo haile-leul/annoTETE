@@ -20,8 +20,21 @@ export class Viewer {
     this.fitted = true;
     this._raf = null;
     this.mouse = null;
+    this.dead = false;
+    this._ac = new AbortController();
     this._bind();
-    new ResizeObserver(() => this._resize()).observe(canvas.parentElement);
+    this._ro = new ResizeObserver(() => this._resize());
+    this._ro.observe(canvas.parentElement);
+  }
+
+  // Stop drawing and listening: the canvas is shared with the next video's viewer.
+  destroy() {
+    this.dead = true;
+    this._ac.abort();
+    this._ro.disconnect();
+    if (this._raf) cancelAnimationFrame(this._raf);
+    this._raf = null;
+    this.img = null;
   }
 
   setImageSize(w, h) { this.iw = w; this.ih = h; this.fit(); }
@@ -29,6 +42,7 @@ export class Viewer {
   setImage(bmp) { this.img = bmp; this.render(); }
 
   _resize() {
+    if (this.dead) return;
     const r = this.c.parentElement.getBoundingClientRect();
     const dpr = window.devicePixelRatio || 1;
     this.cw = r.width; this.ch = r.height;
@@ -85,7 +99,7 @@ export class Viewer {
   get density() { return 1 / this.scale; }
 
   render() {
-    if (this._raf) return;
+    if (this._raf || this.dead) return;
     this._raf = requestAnimationFrame(() => { this._raf = null; this._draw(); });
   }
 
@@ -111,6 +125,7 @@ export class Viewer {
 
   _bind() {
     const c = this.c;
+    const sig = { signal: this._ac.signal };
     let mode = null, start = null, moved = false, last = null;
     c.addEventListener('mousedown', (ev) => {
       if (ev.button === 2) return;
@@ -141,16 +156,16 @@ export class Viewer {
       };
       window.addEventListener('mousemove', move);
       window.addEventListener('mouseup', up);
-    });
-    c.addEventListener('mousemove', (ev) => { if (!mode) { this.mouse = this._pt(ev); this.h.hover(this.mouse, ev); } });
-    c.addEventListener('mouseleave', () => { this.mouse = null; this.h.hover(null); });
+    }, sig);
+    c.addEventListener('mousemove', (ev) => { if (!mode) { this.mouse = this._pt(ev); this.h.hover(this.mouse, ev); } }, sig);
+    c.addEventListener('mouseleave', () => { this.mouse = null; this.h.hover(null); }, sig);
     c.addEventListener('wheel', (ev) => {
       ev.preventDefault();
       const p = this._pt(ev);
       const k = ev.deltaMode === 1 ? 0.05 : 0.0015;
       this.zoomAt(p.sx, p.sy, Math.exp(-ev.deltaY * k));
-    }, { passive: false });
-    c.addEventListener('contextmenu', (ev) => { ev.preventDefault(); this.h.context(this._pt(ev), ev); });
-    c.addEventListener('dblclick', (ev) => { if (!this.h.dblclick || !this.h.dblclick(this._pt(ev), ev)) this.fit(); });
+    }, { passive: false, signal: this._ac.signal });
+    c.addEventListener('contextmenu', (ev) => { ev.preventDefault(); this.h.context(this._pt(ev), ev); }, sig);
+    c.addEventListener('dblclick', (ev) => { if (!this.h.dblclick || !this.h.dblclick(this._pt(ev), ev)) this.fit(); }, sig);
   }
 }
