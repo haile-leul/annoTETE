@@ -446,7 +446,7 @@ export class TrackingTask {
       this.dragging = { type: 'draw', a: p, b: p };
       return 'drag';
     }
-    if (this.pending) return 'pan'; // resolved on click
+    if (this.pending) return this.hitTest(p) ? 'click' : 'pan'; // resolved on click
     const hd = this.handleAt(p);
     const t = this.active != null ? this.trackBox(this.active) : null;
     if (hd && t) { this.dragging = { type: 'resize', handle: hd, box: t.slice(1, 5), orig: t.slice(1, 5), start: p }; return 'drag'; }
@@ -455,7 +455,7 @@ export class TrackingTask {
       this.dragging = { type: 'move', box: hit.item.slice(1, 5), orig: hit.item.slice(1, 5), start: p };
       return 'drag';
     }
-    return 'pan';
+    return hit ? 'click' : 'pan'; // a press on a box never pans the view
   }
 
   drag(p) {
@@ -520,10 +520,10 @@ export class TrackingTask {
     else this.setActive(hit.item[0]);
   }
 
+  // Double click on a box does nothing extra (two quick clicks are two clicks);
+  // on empty space it fits the frame. Zoom to the active track with Z.
   dblclick(p) {
-    const hit = this.hitTest(p);
-    if (hit && hit.kind !== 'tag') { this.viewer.centerOn(hit.item.slice(1, 5), 0.35); return true; }
-    return false;
+    return !!this.hitTest(p);
   }
 
   hover(p) {
@@ -588,6 +588,7 @@ export class TrackingTask {
   // --------------------------------------------------------------- drawing
   draw(ctx, view) {
     this._tags = [];
+    $('#fitBtn').classList.toggle('hidden', view.whole);
     if (this.shownFrame !== this.frame && !this.playing) ctx.globalAlpha = 0.85;
     const hov = this.hovered && this.hovered.item;
     const propDets = new Map(this.props.proposals.filter((p) => p.frame === this.frame).map((p) => [p.det, p]));
@@ -942,7 +943,7 @@ export const KEYMAP = [
     ['B or Ctrl+drag', 'draw a box (missed detection)'],
   ]],
   ['View', [
-    ['wheel / drag', 'zoom / pan (double click: fit or zoom to box)'],
+    ['wheel / drag empty space', 'zoom / pan (double click empty space or "fit": whole frame)'],
     ['Z', 'zoom to the active track / fit'],
     ['F', 'follow the active track'],
     ['L / H / T', 'labels / free detections / trails'],

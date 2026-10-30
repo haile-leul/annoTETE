@@ -250,6 +250,7 @@ class App {
     $('#exportBtn').onclick = () => this.exportDialog();
     $('#projectBtn').onclick = () => this.projectDialog();
     $('#helpBtn').onclick = () => this.helpDialog();
+    $('#fitBtn').onclick = (e) => { if (this.task) this.task.viewer.fit(); e.currentTarget.blur(); };
     for (const b of $$('.tabs button')) {
       b.onclick = () => {
         $$('.tabs button').forEach((x) => x.classList.toggle('on', x === b));

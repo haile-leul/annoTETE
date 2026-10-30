@@ -110,8 +110,12 @@ that stay unassigned over several frames), long *interpolated* runs and very
   track (click to select + jump); diamonds = keyframes of the active track;
   green ticks = keyframe steps; shaded = outside the range. Wheel zooms, drag scrubs.
 
-Zoom with the wheel (at the cursor), pan by dragging empty space, double click
-fits the view or zooms to a box. When zoomed in on a large video the frame is
+Zoom with the wheel (at the cursor) and pan by dragging empty space; the frame
+can't be dragged out of view. Clicking a box never pans, even if the mouse slips
+a little, and two quick clicks are just two clicks. When part of the frame is
+outside the view, a **fit** button appears in the bottom-right corner (or double
+click empty space, <kbd>Ctrl</kbd>+<kbd>0</kbd>). *Follow* (<kbd>F</kbd>) only moves
+the view when you are zoomed in. When zoomed in on a large video the frame is
 re-fetched at native resolution, so small objects in 4K stay sharp.
 
 ### Shortcuts (<kbd>?</kbd> in the app)
@@ -135,7 +139,7 @@ re-fetched at native resolution, so small objects in 4K stay sharp.
 | <kbd>B</kbd> or <kbd>Ctrl</kbd>+drag | draw a box (missed detection) |
 | <kbd>Alt</kbd>+<kbd>→</kbd> / <kbd>←</kbd> | next / previous keyframe of the active track |
 | <kbd>P</kbd>, <kbd>Home</kbd> / <kbd>End</kbd> | play, range start / end |
-| <kbd>Z</kbd>, <kbd>F</kbd> | zoom to the active track, follow it |
+| <kbd>Z</kbd>, <kbd>F</kbd> | zoom to the active track / back to the whole frame, follow it when zoomed in |
 | <kbd>L</kbd> <kbd>H</kbd> <kbd>T</kbd> | labels, free detections, trails |
 | <kbd>[</kbd> <kbd>]</kbd> | previous / next review issue |
 | <kbd>Shift</kbd>+<kbd>I</kbd> / <kbd>Shift</kbd>+<kbd>O</kbd> | range in / out at this frame |

@@ -4,7 +4,9 @@
 //
 // The task supplies a handler:
 //   draw(ctx, view)            overlay, in screen pixels (use view.rect(box))
-//   down(p, ev) -> 'drag'|'pan'  pointer pressed; 'drag' = the task handles move/up
+//   down(p, ev) -> 'drag'|'click'|'pan'  pointer pressed: 'drag' = the task handles
+//                               move/up; 'click' = a press on something clickable
+//                               (never pans, tolerates a slip of the hand)
 //   drag(p, ev), up(p, ev, moved)
 //   click(p, ev)               click (no drag) that the task did not consume on down
 //   hover(p, ev), context(p, ev)
@@ -48,7 +50,7 @@ export class Viewer {
     this.cw = r.width; this.ch = r.height;
     this.c.width = Math.round(r.width * dpr);
     this.c.height = Math.round(r.height * dpr);
-    if (this.fitted) this.fit(); else this.render();
+    if (this.fitted) this.fit(); else { this._clamp(); this.render(); }
   }
 
   fit() {
@@ -73,8 +75,20 @@ export class Viewer {
     this.ox = sx - p.x * this.scale;
     this.oy = sy - p.y * this.scale;
     this.fitted = false;
+    this._clamp();
     this.render();
   }
+
+  // Keep the frame in view: no empty margin beside a frame larger than the
+  // view, and a frame smaller than the view stays centred.
+  _clamp() {
+    const W = this.iw * this.scale, H = this.ih * this.scale;
+    this.ox = W <= this.cw ? (this.cw - W) / 2 : Math.min(0, Math.max(this.cw - W, this.ox));
+    this.oy = H <= this.ch ? (this.ch - H) / 2 : Math.min(0, Math.max(this.ch - H, this.oy));
+  }
+
+  // the whole frame is visible
+  get whole() { return this.iw * this.scale <= this.cw + 0.5 && this.ih * this.scale <= this.ch + 0.5; }
 
   // Keep box b visible: center on it, optionally zooming so it fills ~`fill` of the view.
   centerOn(b, fill = 0) {
@@ -85,11 +99,14 @@ export class Viewer {
     this.ox = this.cw / 2 - (b[0] + b[2] / 2) * this.scale;
     this.oy = this.ch / 2 - (b[1] + b[3] / 2) * this.scale;
     this.fitted = false;
+    this._clamp();
     this.render();
   }
 
-  // only move if the box is (partly) outside the central area
+  // Zoomed in only: move when the box gets close to the border of the view.
+  // A view that shows the whole frame is never moved.
   follow(b) {
+    if (this.whole) return;
     const [x, y, w, hh] = this.rect(b);
     const m = 0.18;
     if (x < this.cw * m || y < this.ch * m || x + w > this.cw * (1 - m) || y + hh > this.ch * (1 - m)) this.centerOn(b);
@@ -127,6 +144,7 @@ export class Viewer {
     const c = this.c;
     const sig = { signal: this._ac.signal };
     let mode = null, start = null, moved = false, last = null;
+    const SLIP = 6; // px a click may move and still be a click
     c.addEventListener('mousedown', (ev) => {
       if (ev.button === 2) return;
       ev.preventDefault();
@@ -135,15 +153,16 @@ export class Viewer {
       mode = ev.button === 1 ? 'pan' : (this.h.down(p, ev) || 'pan');
       const move = (e) => {
         const q = this._pt(e);
-        if (Math.abs(q.sx - start.sx) + Math.abs(q.sy - start.sy) > 3) moved = true;
+        if (!moved && Math.hypot(q.sx - start.sx, q.sy - start.sy) > SLIP) { moved = true; last = start; }
         if (mode === 'pan') {
           if (moved) {
             this.ox += q.sx - last.sx; this.oy += q.sy - last.sy;
             this.fitted = false;
+            this._clamp();
             this.render();
             c.style.cursor = 'grabbing';
           }
-        } else this.h.drag(q, e);
+        } else if (mode === 'drag' && moved) this.h.drag(q, e);
         last = q;
       };
       const up = (e) => {
@@ -151,7 +170,7 @@ export class Viewer {
         window.removeEventListener('mouseup', up);
         c.style.cursor = '';
         const q = this._pt(e);
-        if (mode === 'pan') { if (!moved) this.h.click(q, e); } else this.h.up(q, e, moved);
+        if (mode === 'pan' || mode === 'click') { if (!moved || mode === 'click' && Math.hypot(q.sx - start.sx, q.sy - start.sy) < 3 * SLIP) this.h.click(start, e); } else this.h.up(q, e, moved);
         mode = null;
       };
       window.addEventListener('mousemove', move);
