@@ -301,9 +301,16 @@ problem). It shows how many detector gaps the tracker filled by itself.
   not listed. Keys: <kbd>←</kbd> <kbd>→</kbd> frame, <kbd>Space</kbd> play,
   <kbd>[</kbd> <kbd>]</kbd> previous / next event, <kbd>Esc</kbd> back.
 
-**Comparing two trackers** (*Compare with* = your previous version): every score shows
-the change, events are tagged **fixed** (gone in the new version) or **new**
-(regressions), and each video row shows the counts.
+**Comparing two trackers** (*Tracker output* = the new version, *Compare with* =
+your previous version): a "What changed" card on top says in words whether the new
+version is better or worse overall and lists the metrics that got better, worse or
+stayed the same (`previous → new`). Each score tile shows the new value, the
+previous one (`v1: …`) and the change as `▲ 3.1 better` / `▼ 2 worse`: the arrow is
+the direction of the number, the color and word say whether that is good (for ID
+switches, false and missed boxes lower is better). Events are tagged **fixed**
+(gone in the new version) or **new** (regressions), and each video row shows the
+counts. Two outputs with the same folder name are called `name (new)` and
+`name (previous)`.
 
 Each run also saves a report (JSON + CSV, per video and combined, both variants) in
 `<export>/evaluation/`.

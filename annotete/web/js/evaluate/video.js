@@ -325,7 +325,7 @@ export class VideoView {
     const mine = S.results[this.ti].seqs[this.seq], other = S.results.length === 2 ? S.results[1 - this.ti].seqs[this.seq] : null;
     const r = mine[v] || mine.all;
     const tile = (k, main) => h('div', { class: `tile${main ? ' hi' : ''}`, title: M[k][1] },
-      h('div', { class: 'k' }, h('span', {}, M[k][0]), other && other[v] && this.ti === 0 ? delta(k, r[k], other[v][k]) : ''),
+      h('div', { class: 'k' }, h('span', {}, M[k][0]), other && other[v] && this.ti === 0 ? delta(k, r[k], other[v][k], true) : ''),
       h('div', { class: 'v' }, fmt(k, r[k])));
     const card = h('div', { class: 'card' },
       h('div', { class: 'row', style: { justifyContent: 'space-between' } }, h('h4', { style: { margin: 0 } }, this.seq),

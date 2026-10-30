@@ -21,7 +21,7 @@ class Evaluation:
     self.trackers = [(n or os.path.basename(os.path.normpath(p)), os.path.abspath(os.path.expanduser(p)))
                      for n, p in trackers]
     if len({n for n, _ in self.trackers}) < len(self.trackers):
-      self.trackers = [(f'{n} ({i + 1})', p) for i, (n, p) in enumerate(self.trackers)]
+      self.trackers = [(f'{n} ({w})', p) for w, (n, p) in zip(('new', 'previous'), self.trackers)]
     self.shift = shift
     self.classes = classes
     self.log = log

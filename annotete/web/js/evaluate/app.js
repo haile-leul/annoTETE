@@ -5,22 +5,22 @@ import { VideoView } from './video.js';
 
 // metric key -> label, help, percent?, which direction is better
 export const M = {
-  HOTA: ['HOTA', 'Overall tracking accuracy: √(DetA × AssA), averaged over IoU thresholds 0.05–0.95', true, 1],
-  DetA: ['DetA', 'Detection accuracy: are the objects found (TP / (TP + FN + FP))', true, 1],
-  AssA: ['AssA', 'Association accuracy: does each object keep one tracker id over time', true, 1],
-  IDF1: ['IDF1', 'Identity F1: share of boxes with the right id under the best global id mapping', true, 1],
-  MOTA: ['MOTA', 'CLEAR MOTA: 1 − (FN + FP + IDSW) / GT boxes (mostly detection)', true, 1],
-  MOTP: ['MOTP', 'Mean IoU of matched boxes', true, 1],
-  DetRe: ['DetRe', 'Detection recall', true, 1],
-  DetPr: ['DetPr', 'Detection precision', true, 1],
-  IDSW: ['IDSW', 'Identity switches: an object continues under a different tracker id', false, -1],
-  Frag: ['Frag', 'Fragmentations: an object stops being tracked and is picked up again', false, -1],
-  CLR_FP: ['FP', 'False boxes (IoU 0.5)', false, -1],
-  CLR_FN: ['FN', 'Missed boxes (IoU 0.5)', false, -1],
-  MT: ['MT', 'Mostly tracked objects (> 80% of their frames)', false, 1],
-  ML: ['ML', 'Mostly lost objects (< 20% of their frames)', false, -1],
-  IDs: ['IDs', 'Tracker ids', false, 0],
-  GT_IDs: ['GT ids', 'Annotated objects', false, 0],
+  HOTA: ['HOTA', 'Overall tracking accuracy: √(DetA × AssA), averaged over IoU thresholds 0.05–0.95', true, 1, 'HOTA'],
+  DetA: ['DetA', 'Detection accuracy: are the objects found (TP / (TP + FN + FP))', true, 1, 'DetA'],
+  AssA: ['AssA', 'Association accuracy: does each object keep one tracker id over time', true, 1, 'AssA'],
+  IDF1: ['IDF1', 'Identity F1: share of boxes with the right id under the best global id mapping', true, 1, 'IDF1'],
+  MOTA: ['MOTA', 'CLEAR MOTA: 1 − (FN + FP + IDSW) / GT boxes (mostly detection)', true, 1, 'MOTA'],
+  MOTP: ['MOTP', 'Mean IoU of matched boxes', true, 1, 'MOTP'],
+  DetRe: ['DetRe', 'Detection recall', true, 1, 'detection recall'],
+  DetPr: ['DetPr', 'Detection precision', true, 1, 'detection precision'],
+  IDSW: ['IDSW', 'Identity switches: an object continues under a different tracker id', false, -1, 'ID switches'],
+  Frag: ['Frag', 'Fragmentations: an object stops being tracked and is picked up again', false, -1, 'fragmentations'],
+  CLR_FP: ['FP', 'False boxes (IoU 0.5)', false, -1, 'false boxes'],
+  CLR_FN: ['FN', 'Missed boxes (IoU 0.5)', false, -1, 'missed boxes'],
+  MT: ['MT', 'Mostly tracked objects (> 80% of their frames)', false, 1, 'mostly tracked objects'],
+  ML: ['ML', 'Mostly lost objects (< 20% of their frames)', false, -1, 'mostly lost objects'],
+  IDs: ['IDs', 'Tracker ids', false, 0, 'tracker ids'],
+  GT_IDs: ['GT ids', 'Annotated objects', false, 0, 'annotated objects'],
 };
 export const EVENTS = {
   swap: ['swap', 'two objects exchange tracker ids'],
@@ -33,13 +33,28 @@ export const EVENTS = {
 
 export const fmt = (k, v) => (v == null ? '–' : M[k] && M[k][2] ? (v * 100).toFixed(1) : String(v));
 
-export function delta(k, a, b) {
-  if (b == null || a == null) return '';
+// names of the compared outputs: `cur` is the tracker output, `prev` the one it is compared with
+export const cmp = { cur: '', prev: '' };
+
+// how `a` (current output) changed against `b` (previous output) for metric k
+export function change(k, a, b) {
+  if (a == null || b == null) return null;
   const d = M[k][2] ? (a - b) * 100 : a - b;
-  if (Math.abs(d) < (M[k][2] ? 0.05 : 0.5)) return h('span', { class: 'delta same' }, '±0');
-  const good = Math.sign(d) === M[k][3];
-  return h('span', { class: `delta ${M[k][3] === 0 ? 'same' : good ? 'up' : 'down'}`, title: 'current − previous' },
-    `${d > 0 ? '+' : '−'}${Math.abs(d).toFixed(M[k][2] ? 1 : 0)}`);
+  const mag = Math.abs(d).toFixed(M[k][2] ? 1 : 0);
+  if (Math.abs(d) < (M[k][2] ? 0.05 : 0.5)) return { d: 0, mag, verdict: 'same' };
+  return { d, mag, verdict: M[k][3] === 0 ? 'neutral' : Math.sign(d) === M[k][3] ? 'better' : 'worse' };
+}
+
+export function delta(k, a, b, compact = false) {
+  const c = change(k, a, b);
+  if (!c) return '';
+  const unit = M[k][2] ? ' points' : '';
+  const was = `${cmp.cur} ${fmt(k, a)} vs ${cmp.prev} ${fmt(k, b)}`;
+  if (c.verdict === 'same') return h('span', { class: 'delta same', title: `${was}: no change` }, compact ? '=' : '= same');
+  const dir = c.d > 0 ? 'higher' : 'lower';
+  const title = `${was}: ${cmp.cur} is ${c.mag}${unit} ${dir}` + (c.verdict === 'neutral' ? '' : ` (${c.verdict}; ${M[k][3] > 0 ? 'higher' : 'lower'} is better)`);
+  const cls = c.verdict === 'better' ? 'up' : c.verdict === 'worse' ? 'down' : 'same';
+  return h('span', { class: `delta ${cls}`, title }, `${c.d > 0 ? '▲' : '▼'} ${c.mag}`, compact || c.verdict === 'neutral' ? '' : ` ${c.verdict}`);
 }
 
 class EvalApp {
@@ -176,20 +191,24 @@ class EvalApp {
     const root = $('#overview');
     root.innerHTML = '';
     const ca = A.combined[v], cb = B && B.combined[v];
+    cmp.cur = A.name;
+    cmp.prev = B ? B.name : '';
     const varSeg = h('div', { class: 'seg' }, [['all', 'All annotations'], ['det', 'Detector-visible only']].map(([k, label]) =>
       h('button', { class: k === v ? 'on' : '', disabled: k === 'det' && !S.has_kinds,
         title: k === 'det' ? (S.has_kinds ? 'Annotated boxes without a detection (interpolated / drawn) are ignored: the score the tracker can reach with this detector'
           : 'Needs annotations_json/ in the export (tick JSON when exporting)') : 'Every annotated box counts',
         onclick: () => { this.variant = k; store.set('ev:variant', k); this.renderOverview(); } }, label)));
     const tile = (k, main) => h('div', { class: `tile${main ? ' hi' : ''}`, title: M[k][1] },
-      h('div', { class: 'k' }, h('span', {}, M[k][0]), cb ? delta(k, ca[k], cb[k]) : ''),
+      h('div', { class: 'k' }, h('span', {}, M[k][0])),
       h('div', { class: 'v' }, fmt(k, ca[k])),
-      cb ? h('div', { class: 's' }, `was ${fmt(k, cb[k])}`) : '');
+      cb ? h('div', { class: 'dl' }, delta(k, ca[k], cb[k])) : '',
+      cb ? h('div', { class: 's' }, `${B.name}: ${fmt(k, cb[k])}`) : '');
     const wrap = h('div', { class: 'wrap' });
     wrap.append(
       h('div', { class: 'row', style: { justifyContent: 'space-between' } },
         h('h2', {}, B ? `${A.name} vs ${B.name}` : A.name, h('small', {}, `${S.seqs.length} video${S.seqs.length > 1 ? 's' : ''} · ground truth ${S.gt_dir}`)),
         varSeg),
+      B ? this.verdictCard(ca, cb, A, B) : '',
       h('div', { class: 'tiles' }, ['HOTA', 'DetA', 'AssA', 'IDF1', 'MOTA', 'IDSW', 'Frag', 'CLR_FP', 'CLR_FN', 'MT', 'ML', 'IDs'].map((k, i) => tile(k, i === 0))),
     );
     if (S.warnings.length) wrap.append(h('div', { class: 'card warnlist' }, S.warnings.slice(0, 12).map((w) => h('div', {}, '⚠ ', w))));
@@ -198,6 +217,32 @@ class EvalApp {
     wrap.append(this.videoTable(A, B));
     if (this.report) wrap.append(h('div', { class: 'muted small' }, `Report (JSON + CSV) saved in ${this.report}`));
     root.append(wrap);
+  }
+
+  verdictCard(ca, cb, A, B) {
+    const keys = ['HOTA', 'DetA', 'AssA', 'IDF1', 'MOTA', 'IDSW', 'Frag', 'CLR_FP', 'CLR_FN', 'MT', 'ML'];
+    const groups = { better: [], worse: [], same: [] };
+    for (const k of keys) {
+      const c = change(k, ca[k], cb[k]);
+      if (c && groups[c.verdict]) groups[c.verdict].push(k);
+    }
+    const item = (k) => h('span', { class: 'cmpitem', title: M[k][1] }, h('b', {}, M[k][4]), ` ${fmt(k, cb[k])} → ${fmt(k, ca[k])}`);
+    const row = (label, cls, ks) => h('div', { class: `cmprow ${cls}` }, h('span', { class: 'cmplab' }, label),
+      h('span', { class: 'cmpitems' }, ks.length ? ks.map(item) : h('span', { class: 'muted' }, 'nothing')));
+    const c = change('HOTA', ca.HOTA, cb.HOTA);
+    const head = c.verdict === 'same' ? [h('b', {}, A.name), ' and ', h('b', {}, B.name), ' score the same overall (HOTA).']
+      : [h('b', {}, A.name), ' is ', h('b', { class: c.verdict === 'better' ? 'good' : 'bad' }, `${c.verdict} overall`),
+        ` than ${B.name}: HOTA ${fmt('HOTA', cb.HOTA)} → ${fmt('HOTA', ca.HOTA)} (${c.d > 0 ? '+' : '−'}${c.mag} points).`];
+    return h('div', { class: 'card cmpcard' },
+      h('h4', {}, `What changed from ${B.name} to ${A.name}`),
+      h('div', { class: 'cmphead' }, head),
+      row(`better in ${A.name}`, 'good', groups.better),
+      row(`worse in ${A.name}`, 'bad', groups.worse),
+      groups.same.length ? row('unchanged', 'same', groups.same) : '',
+      h('div', { class: 'muted small', style: { marginTop: '6px' } },
+        `Everywhere below: the big number is ${A.name}, "${B.name}: …" is the comparison, `,
+        h('span', { class: 'delta up' }, '▲ / ▼'), ' is how much higher / lower ', A.name, ' is, ',
+        h('span', { class: 'delta up' }, 'green'), ' = better, ', h('span', { class: 'delta down' }, 'red'), ' = worse (for ID switches, false and missed boxes lower is better). Hover a number for the details.'));
   }
 
   detectorCard(A, B) {
@@ -229,7 +274,8 @@ class EvalApp {
     if (d.gt - d.gt_det) lines.push(h('div', {}, `The tracker itself filled ${d.tp_nodet} of the ${d.gt - d.gt_det} boxes the detector missed.`));
     if (d.flicker) lines.push(h('div', {}, `The detector blinked ${d.flicker} times (${d.flicker_frames} frames with no box, the tracker kept the id): not listed as events.`));
     if (B && B.combined.det && A.combined.det) {
-      lines.push(h('div', {}, 'Change vs previous: all annotations ', delta('HOTA', A.combined.all.HOTA, B.combined.all.HOTA), ' · detector-visible ', delta('HOTA', A.combined.det.HOTA, B.combined.det.HOTA), ' HOTA'));
+      lines.push(h('div', {}, `HOTA of ${A.name} vs ${B.name}: all annotations `, delta('HOTA', A.combined.all.HOTA, B.combined.all.HOTA),
+        ' · detector-visible only ', delta('HOTA', A.combined.det.HOTA, B.combined.det.HOTA)));
     }
     card.append(h('div', { class: 'insight' }, lines));
     return card;
@@ -263,7 +309,7 @@ class EvalApp {
   eventsCard(A, B) {
     const e = A.combined.events;
     const chips = Object.entries(EVENTS).map(([k, [label, desc]]) => h('span', { class: `evchip ${k}`, title: desc },
-      `${label} ${e[k]}`, B ? ` (was ${B.combined.events[k]})` : ''));
+      `${label} ${e[k]}`, B ? ` (${B.name}: ${B.combined.events[k]})` : ''));
     const fl = A.combined.detector.flicker;
     if (fl) chips.push(h('span', { class: 'evchip', title: 'short gaps where the detector had no box and the tracker kept the id: not listed' }, `detector flicker ${fl}`));
     const card = h('div', { class: 'card' }, h('h4', {}, 'What goes wrong'), h('div', { class: 'evchips', style: { justifyContent: 'flex-start' } }, chips));
@@ -298,11 +344,12 @@ class EvalApp {
       table.append(h('tr', { class: 'r', onclick: () => this.openVideo(n), title: a.align },
         h('td', {}, n),
         cols.map((k) => h('td', {}, r ? fmt(k, r[k]) : '–', k === 'HOTA' && r ? h('span', { class: 'heat' }, h('i', { style: { width: `${r.HOTA * 100}%` } })) : '',
-          b && r && b[v] ? delta(k, r[k], b[v][k]) : '')),
+          b && r && b[v] ? delta(k, r[k], b[v][k], true) : '')),
         h('td', { title: 'share of the annotated boxes that had a detection' }, cov != null && this.summary.has_kinds ? `${(cov * 100).toFixed(0)}%` : '–'),
         h('td', {}, h('span', { class: 'evchips' }, ev))));
     }
-    return h('div', { class: 'card' }, h('h4', {}, 'Videos', h('span', { class: 'muted', style: { textTransform: 'none', letterSpacing: 0, fontWeight: 400 } }, ' · click one to see where it goes wrong')), table);
+    return h('div', { class: 'card' }, h('h4', {}, 'Videos', h('span', { class: 'muted', style: { textTransform: 'none', letterSpacing: 0, fontWeight: 400 } },
+      ' · click one to see where it goes wrong', B ? ` · numbers are ${A.name}, ▲ / ▼ the change vs ${B.name} (green better, red worse)` : '')), table);
   }
 
   openVideo(seq) {

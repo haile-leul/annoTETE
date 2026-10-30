@@ -21,13 +21,25 @@
 .tile { background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; position: relative; }
 .tile .k { color: var(--muted); font-size: 12px; display: flex; justify-content: space-between; }
 .tile .v { font: 600 24px var(--mono); margin-top: 2px; }
-.tile .s { font-size: 12px; color: var(--muted); margin-top: 2px; font-family: var(--mono); }
+.tile .s { font-size: 12px; color: var(--muted); margin-top: 2px; font-family: var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tile .dl { margin-top: 3px; }
+.tile .dl .delta { margin-left: -5px; }
 .tile.hi { border-color: var(--accent2); }
 .tile.hi .v { color: var(--accent2); font-size: 30px; }
-.delta { font: 600 12px var(--mono); }
-.delta.up { color: var(--good); }
-.delta.down { color: var(--bad); }
+.delta { font: 600 12px var(--mono); padding: 0 5px; border-radius: 4px; white-space: nowrap; }
+.delta.up { color: var(--good); background: rgba(76,207,122,.12); }
+.delta.down { color: var(--bad); background: rgba(239,91,91,.12); }
 .delta.same { color: var(--muted); }
+.cmpcard .cmphead { font-size: 15px; margin-bottom: 8px; }
+.cmpcard b.good { color: var(--good); }
+.cmpcard b.bad { color: var(--bad); }
+.cmprow { display: grid; grid-template-columns: 150px 1fr; gap: 10px; align-items: baseline; padding: 4px 0; border-top: 1px solid #222932; }
+.cmplab { font-size: 12px; font-weight: 600; }
+.cmprow.good .cmplab { color: var(--good); }
+.cmprow.bad .cmplab { color: var(--bad); }
+.cmprow.same .cmplab { color: var(--muted); }
+.cmpitems { display: flex; flex-wrap: wrap; gap: 4px 16px; font: 12.5px var(--mono); }
+.cmpitem b { font-family: var(--sans, inherit); font-weight: 500; }
 .seg { display: inline-flex; }
 .row2 { display: grid; grid-template-columns: 1.15fr 1fr; gap: 14px; }
 .bar { display: flex; height: 22px; border-radius: 5px; overflow: hidden; background: #0b0d10; margin: 6px 0 4px; }
